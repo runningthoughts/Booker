@@ -101,19 +101,37 @@ const BookerChat = () => {
     </div>
   )
 
+  const CollapsibleSources = ({ sources }) => {
+    const [isExpanded, setIsExpanded] = useState(false)
+
+    if (!sources || sources.length === 0) return null
+
+    return (
+      <div className="sources-container">
+        <button 
+          className="sources-toggle"
+          onClick={() => setIsExpanded(!isExpanded)}
+        >
+          <span className="sources-label">Sources ({sources.length})</span>
+          <span className={`sources-arrow ${isExpanded ? 'expanded' : ''}`}>▼</span>
+        </button>
+        {isExpanded && (
+          <div className="sources-content">
+            {sources.map((source, index) => (
+              <Citation key={index} source={source} />
+            ))}
+          </div>
+        )}
+      </div>
+    )
+  }
+
   const Message = ({ message }) => (
     <div className={`message ${message.type}`}>
       <div className="message-content">
         {message.content}
       </div>
-      {message.sources && message.sources.length > 0 && (
-        <div className="sources">
-          <h4>Sources:</h4>
-          {message.sources.map((source, index) => (
-            <Citation key={index} source={source} />
-          ))}
-        </div>
-      )}
+      <CollapsibleSources sources={message.sources} />
     </div>
   )
 
@@ -190,17 +208,7 @@ const BookerChat = () => {
           box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
         }
 
-        .sources {
-          margin-top: 1rem;
-          padding: 0 1.5rem;
-        }
 
-        .sources h4 {
-          margin: 0 0 0.5rem 0;
-          color: #666;
-          font-size: 0.9rem;
-          font-weight: 600;
-        }
 
         .citation {
           background: #f8f9fa;
@@ -256,6 +264,51 @@ const BookerChat = () => {
           font-size: 0.8rem;
           color: #666;
           font-style: italic;
+        }
+
+        .sources-container {
+          margin-top: 1rem;
+          padding: 0 1.5rem;
+        }
+
+        .sources-toggle {
+          background: #f8f9fa;
+          border: 1px solid #e9ecef;
+          border-radius: 8px;
+          padding: 0.75rem 1rem;
+          width: 100%;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          font-size: 0.9rem;
+          font-weight: 600;
+          color: #666;
+        }
+
+        .sources-toggle:hover {
+          background: #e9ecef;
+          border-color: #667eea;
+        }
+
+        .sources-label {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+        }
+
+        .sources-arrow {
+          transition: transform 0.2s ease;
+          font-size: 0.8rem;
+        }
+
+        .sources-arrow.expanded {
+          transform: rotate(180deg);
+        }
+
+        .sources-content {
+          margin-top: 0.5rem;
         }
 
         .input-container {
