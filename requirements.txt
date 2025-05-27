@@ -1,0 +1,25 @@
+# Core dependencies
+duckdb>=0.10.0
+faiss-cpu>=1.7.4
+openai>=1.3.0
+tiktoken>=0.5.0
+pypdf>=3.17.0
+python-docx>=1.1.0
+spacy>=3.7.0
+
+# Web framework
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+pydantic>=2.5.0
+
+# Testing
+pytest>=7.4.0
+python-dotenv>=1.0.0
+
+# NumPy - compatible with existing packages
+numpy>=1.21.6,<1.27.0
+
+# Note: For the React frontend, you'll need Node.js and npm/yarn
+# Run these commands in the ui/ directory:
+# npm install react react-dom
+# npm install -D vite @vitejs/plugin-react 
