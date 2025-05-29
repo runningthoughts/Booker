@@ -12,7 +12,44 @@ const BookerChat = () => {
   const [inputValue, setInputValue] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [bookId, setBookId] = useState('')
+  const [bookMetadata, setBookMetadata] = useState(null)
+  const [coverImage, setCoverImage] = useState(null)
+  const [imageLayout, setImageLayout] = useState('vertical') // 'vertical' or 'horizontal'
   const messagesEndRef = useRef(null)
+
+  // Function to load book assets
+  const loadBookAssets = async (bookId) => {
+    try {
+      // Try to load title.json
+      const titleResponse = await fetch(`http://localhost:8000/library/${bookId}/assets/title.json`)
+      if (titleResponse.ok) {
+        const metadata = await titleResponse.json()
+        setBookMetadata(metadata)
+      }
+    } catch (error) {
+      console.log('No title.json found for book:', bookId)
+    }
+
+    try {
+      // Try to load cover.png
+      const coverResponse = await fetch(`http://localhost:8000/library/${bookId}/assets/cover.png`)
+      if (coverResponse.ok) {
+        const coverUrl = `http://localhost:8000/library/${bookId}/assets/cover.png`
+        setCoverImage(coverUrl)
+        
+        // Create an image element to check dimensions
+        const img = new Image()
+        img.onload = () => {
+          // Determine layout based on aspect ratio
+          const aspectRatio = img.width / img.height
+          setImageLayout(aspectRatio > 1.5 ? 'horizontal' : 'vertical')
+        }
+        img.src = coverUrl
+      }
+    } catch (error) {
+      console.log('No cover.png found for book:', bookId)
+    }
+  }
 
   useEffect(() => {
     // Get bookId from URL query parameters
@@ -20,6 +57,7 @@ const BookerChat = () => {
     const bookIdParam = urlParams.get('bookId')
     if (bookIdParam) {
       setBookId(bookIdParam)
+      loadBookAssets(bookIdParam)
     } else {
       // Show error if no bookId provided
       setMessages(prev => [...prev, {
@@ -152,6 +190,61 @@ const BookerChat = () => {
       <CollapsibleSources sources={message.sources} />
     </div>
   )
+
+  // BookHeader component for displaying cover image and metadata
+  const BookHeader = () => {
+    if (!bookMetadata && !coverImage) return null
+
+    return (
+      <div className={`book-header ${imageLayout}`}>
+        {coverImage && (
+          <div className="cover-image-container">
+            <img src={coverImage} alt="Book Cover" className="cover-image" />
+          </div>
+        )}
+        {bookMetadata && (
+          <div className="book-info">
+            <div className="book-info-content">
+              <h2 className="book-title">{bookMetadata.book_name}</h2>
+              {bookMetadata.book_author && (
+                <p className="book-author">by {bookMetadata.book_author}</p>
+              )}
+              {bookMetadata.book_description && (
+                <p className="book-description">{bookMetadata.book_description}</p>
+              )}
+              <div className="book-details">
+                {bookMetadata.publisher && (
+                  <div className="detail-item">
+                    <strong>Publisher:</strong> {bookMetadata.publisher}
+                  </div>
+                )}
+                {bookMetadata.year && (
+                  <div className="detail-item">
+                    <strong>Year:</strong> {bookMetadata.year}
+                  </div>
+                )}
+                {bookMetadata.isbn && (
+                  <div className="detail-item">
+                    <strong>ISBN:</strong> {bookMetadata.isbn}
+                  </div>
+                )}
+                {bookMetadata.copyright && (
+                  <div className="detail-item">
+                    <strong>Copyright:</strong> {bookMetadata.copyright}
+                  </div>
+                )}
+                {bookMetadata.permission && (
+                  <div className="detail-item permission-text">
+                    <strong>Permission:</strong> {bookMetadata.permission}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div className="booker-chat">
@@ -438,6 +531,28 @@ const BookerChat = () => {
           .header h1 {
             font-size: 1.5rem;
           }
+
+          .book-header {
+            padding: 1rem;
+          }
+
+          .book-header.vertical {
+            flex-direction: column;
+            gap: 1rem;
+            text-align: center;
+          }
+
+          .book-title {
+            font-size: 1.5rem;
+          }
+
+          .book-author {
+            font-size: 1rem;
+          }
+
+          .book-description {
+            font-size: 0.9rem;
+          }
           
           .message {
             max-width: 95%;
@@ -447,12 +562,107 @@ const BookerChat = () => {
             padding: 1rem;
           }
         }
+
+        .book-header {
+          background: white;
+          border-bottom: 1px solid #e1e5e9;
+          padding: 1.5rem 2rem;
+          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+
+        .book-header.vertical {
+          display: flex;
+          gap: 2rem;
+          align-items: flex-start;
+        }
+
+        .book-header.horizontal {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          text-align: center;
+        }
+
+        .cover-image-container {
+          flex-shrink: 0;
+        }
+
+        .cover-image {
+          max-height: 500px;
+          max-width: 100%;
+          border-radius: 8px;
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+          object-fit: contain;
+        }
+
+        .book-header.horizontal .cover-image {
+          max-width: 600px;
+          margin-bottom: 1.5rem;
+        }
+
+        .book-info {
+          flex: 1;
+          min-width: 0;
+        }
+
+        .book-info-content {
+          max-width: 100%;
+        }
+
+        .book-title {
+          margin: 0 0 0.5rem 0;
+          font-size: 1.8rem;
+          font-weight: 700;
+          color: #2c3e50;
+          line-height: 1.2;
+        }
+
+        .book-author {
+          margin: 0 0 1rem 0;
+          font-size: 1.1rem;
+          color: #667eea;
+          font-weight: 500;
+        }
+
+        .book-description {
+          margin: 0 0 1.5rem 0;
+          font-size: 0.95rem;
+          color: #555;
+          line-height: 1.6;
+        }
+
+        .book-details {
+          display: grid;
+          gap: 0.5rem;
+        }
+
+        .detail-item {
+          font-size: 0.9rem;
+          color: #666;
+          line-height: 1.4;
+        }
+
+        .detail-item strong {
+          color: #333;
+          font-weight: 600;
+        }
+
+        .permission-text {
+          font-size: 0.8rem;
+          color: #777;
+          font-style: italic;
+          margin-top: 0.5rem;
+          padding-top: 0.5rem;
+          border-top: 1px solid #eee;
+        }
       `}</style>
 
       <div className="header">
         <h1>📚 Booker</h1>
         <p>Ask questions about your books and get intelligent answers with citations</p>
       </div>
+
+      <BookHeader />
 
       <div className="messages-container">
         {messages.map((message) => (
