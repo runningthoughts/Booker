@@ -11,7 +11,25 @@ const BookerChat = () => {
   ])
   const [inputValue, setInputValue] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [bookId, setBookId] = useState('')
   const messagesEndRef = useRef(null)
+
+  useEffect(() => {
+    // Get bookId from URL query parameters
+    const urlParams = new URLSearchParams(window.location.search)
+    const bookIdParam = urlParams.get('bookId')
+    if (bookIdParam) {
+      setBookId(bookIdParam)
+    } else {
+      // Show error if no bookId provided
+      setMessages(prev => [...prev, {
+        id: Date.now(),
+        type: 'assistant',
+        content: 'Error: No book ID specified. Please add ?bookId=YourBookId to the URL.',
+        sources: []
+      }])
+    }
+  }, [])
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -23,7 +41,7 @@ const BookerChat = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!inputValue.trim() || isLoading) return
+    if (!inputValue.trim() || isLoading || !bookId) return
 
     const userMessage = {
       id: Date.now(),
@@ -37,7 +55,7 @@ const BookerChat = () => {
     setIsLoading(true)
 
     try {
-      const response = await fetch('/api/ask', {
+      const response = await fetch(`/api/ask/${bookId}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -207,8 +225,6 @@ const BookerChat = () => {
           border: 1px solid #e1e5e9;
           box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
         }
-
-
 
         .citation {
           background: #f8f9fa;
