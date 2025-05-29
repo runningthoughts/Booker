@@ -17,7 +17,14 @@ Booker is an intelligent question-answering system that allows you to ask questi
 
 ```
 booker/
-├── data/                    # Place your PDF/EPUB files here
+├── library/                 # Books root directory (configurable via BOOKS_ROOT)
+│   └── <book-id>/          # Individual book directories
+│       ├── source/         # Place your PDF/EPUB files here
+│       ├── build/          # Generated data
+│       │   ├── db/         # DuckDB database
+│       │   ├── indexes/    # FAISS indexes
+│       │   └── sidecars/   # Auto-generated JSON summaries
+│       └── assets/         # Optional metadata and cover images
 ├── booker/                  # Core Python package
 │   ├── __init__.py
 │   ├── settings.py          # Configuration and environment variables
@@ -32,9 +39,6 @@ booker/
 │   │   └── main.jsx
 │   ├── index.html
 │   └── vite.config.js
-├── sidecars/               # Auto-generated JSON summaries
-├── db/                     # DuckDB database (created at runtime)
-├── indexes/                # FAISS indexes (created at runtime)
 └── tests/                  # Test suite
 ```
 
@@ -51,6 +55,9 @@ booker/
 ```bash
 # Set your OpenAI API key
 export ragtagKey="your-openai-api-key-here"
+
+# Optional: Set custom books root directory (defaults to ./library)
+export BOOKS_ROOT="/path/to/your/books/collection"
 ```
 
 ### 2. Install Python Dependencies
@@ -73,16 +80,18 @@ cd ..
 
 ### 4. Add Your Books
 
-Place your PDF or EPUB files in the `data/` directory:
+Create a book directory and place your PDF or EPUB files in the source folder:
 
 ```bash
-cp /path/to/your/books/*.pdf data/
+# Create directory structure for a book
+mkdir -p library/The_Gilded_Cage/source
+cp /path/to/your/book.pdf library/The_Gilded_Cage/source/
 ```
 
 ### 5. Ingest Your Books
 
 ```bash
-python -m booker.ingest_book
+python -m booker.ingest_book --book-id The_Gilded_Cage
 ```
 
 This will:
@@ -118,10 +127,12 @@ The web interface will be available at `http://localhost:3000`
 
 ### Web Interface
 
-1. Open your browser to `http://localhost:3000`
+1. Open your browser to `http://localhost:3000?bookId=The_Gilded_Cage`
 2. Type your question in the chat box
 3. Get intelligent answers with source citations
 4. Click on citations to see the source material
+
+Note: You must specify the `bookId` parameter in the URL to select which book to query.
 
 ### API Endpoints
 
@@ -132,14 +143,14 @@ curl http://localhost:8000/health
 
 #### Ask a Question
 ```bash
-curl -X POST http://localhost:8000/ask \
+curl -X POST http://localhost:8000/ask/The_Gilded_Cage \
   -H "Content-Type: application/json" \
   -d '{"question": "What is machine learning?", "k": 5}'
 ```
 
 #### Streaming Response
 ```bash
-curl -X POST http://localhost:8000/ask/stream \
+curl -X POST http://localhost:8000/ask/The_Gilded_Cage/stream \
   -H "Content-Type: application/json" \
   -d '{"question": "Explain neural networks", "k": 3}'
 ```
@@ -147,12 +158,26 @@ curl -X POST http://localhost:8000/ask/stream \
 ### Python API
 
 ```python
+from pathlib import Path
 from booker.qa import answer_question
+from booker.retriever import BookerRetriever
+from booker.settings import BOOKS_ROOT
 
-result = answer_question("What is deep learning?")
-print(result["answer"])
-for source in result["sources"]:
-    print(f"Source: {source['file_name']}, Pages: {source['page_start']}-{source['page_end']}")
+# Set up paths for a specific book
+book_id = "The_Gilded_Cage"
+base_dir = BOOKS_ROOT / book_id / "build"
+db_path = base_dir / "db" / "booker.db"
+index_path = base_dir / "indexes" / "booker.faiss"
+
+# Create retriever and ask question
+retriever = BookerRetriever(db_path, index_path)
+try:
+    result = answer_question("What is deep learning?", retriever)
+    print(result["answer"])
+    for source in result["sources"]:
+        print(f"Source: {source['file_name']}, Pages: {source['page_start']}-{source['page_end']}")
+finally:
+    retriever.close()
 ```
 
 ## 🔧 Configuration
@@ -160,6 +185,7 @@ for source in result["sources"]:
 ### Environment Variables
 
 - `ragtagKey`: Your OpenAI API key (required)
+- `BOOKS_ROOT`: Parent directory for all books (optional, defaults to `./library`)
 
 ### Settings (booker/settings.py)
 
@@ -260,8 +286,8 @@ The tests use mocked OpenAI API calls to avoid costs during development.
 - `api/`: FastAPI web service
 - `ui/`: React frontend application
 - `tests/`: Comprehensive test suite
-- `data/`: Your book files (not in git)
-- `db/`, `indexes/`, `sidecars/`: Generated data (not in git)
+- `library/`: Your book collections organized by book-id (not in git)
+- `library/<book-id>/build/`: Generated data per book (not in git)
 
 ### Code Standards
 
@@ -284,8 +310,9 @@ The tests use mocked OpenAI API calls to avoid costs during development.
 
 1. **Missing API Key**: Ensure `ragtagKey` environment variable is set
 2. **spaCy Model**: Run `python -m spacy download en_core_web_sm`
-3. **Empty Results**: Check that books are in the `data/` directory and ingestion completed
+3. **Empty Results**: Check that books are in the correct `library/<book-id>/source/` directory and ingestion completed
 4. **Port Conflicts**: Change ports in `api/main.py` and `ui/vite.config.js`
+5. **Book Not Found**: Ensure the book-id matches the directory name and ingestion was successful
 
 ### Logs
 

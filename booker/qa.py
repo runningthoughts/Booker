@@ -13,20 +13,18 @@ from .retriever import BookerRetriever
 openai.api_key = settings.OPENAI_API_KEY
 
 
-def answer_question(question: str, k: int = 5) -> Dict[str, Any]:
+def answer_question(question: str, retriever: BookerRetriever, k: int = 5) -> Dict[str, Any]:
     """
     Answer a question using retrieved book chunks and LLM generation.
     
     Args:
         question: The user's question
+        retriever: BookerRetriever instance
         k: Number of chunks to retrieve for context
     
     Returns:
         Dictionary containing the answer and source information
     """
-    # Initialize retriever
-    retriever = BookerRetriever()
-    
     try:
         # Retrieve relevant chunks
         chunks = retriever.similar_chunks(question, k=k)
@@ -87,24 +85,22 @@ def answer_question(question: str, k: int = 5) -> Dict[str, Any]:
             "sources": sources
         }
     
-    finally:
-        retriever.close()
+    except Exception as e:
+        raise e
 
 
-def answer_question_stream(question: str, k: int = 5):
+def answer_question_stream(question: str, retriever: BookerRetriever, k: int = 5):
     """
     Answer a question with streaming response.
     
     Args:
         question: The user's question
+        retriever: BookerRetriever instance
         k: Number of chunks to retrieve for context
     
     Yields:
         Streaming response chunks
     """
-    # Initialize retriever
-    retriever = BookerRetriever()
-    
     try:
         # Retrieve relevant chunks
         chunks = retriever.similar_chunks(question, k=k)
@@ -177,5 +173,5 @@ def answer_question_stream(question: str, k: int = 5):
             "content": sources
         }
     
-    finally:
-        retriever.close() 
+    except Exception as e:
+        raise e 

@@ -3,6 +3,7 @@ FastAPI backend for the Booker application.
 """
 
 import json
+from pathlib import Path
 from typing import Dict, Any
 
 from fastapi import FastAPI, HTTPException
@@ -11,6 +12,8 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from booker.qa import answer_question, answer_question_stream
+from booker.retriever import BookerRetriever
+from booker.settings import BOOKS_ROOT
 
 app = FastAPI(title="Booker API", description="RAG-based book Q&A system")
 
@@ -22,6 +25,16 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+def resolve_paths(book_id: str):
+    base = BOOKS_ROOT / book_id / "build"
+    return {
+        "db":    base / "db" / "booker.db",
+        "index": base / "indexes" / "booker.faiss",
+        "meta":  BOOKS_ROOT / book_id / "assets" / "book_meta.json",
+        "cover": BOOKS_ROOT / book_id / "assets" / "cover.jpg"
+    }
 
 
 class QuestionRequest(BaseModel):
@@ -41,40 +54,53 @@ async def health_check() -> HealthResponse:
     return HealthResponse(status="ok")
 
 
-@app.post("/ask")
-async def ask_question(request: QuestionRequest) -> Dict[str, Any]:
+@app.post("/ask/{book_id}")
+async def ask_question(book_id: str, request: QuestionRequest) -> Dict[str, Any]:
     """
     Answer a question based on the ingested books.
     
     Args:
+        book_id: The book identifier
         request: Question request containing the question and optional k parameter
     
     Returns:
         Dictionary containing the answer and sources
     """
     try:
-        result = answer_question(request.question, k=request.k)
-        return result
+        paths = resolve_paths(book_id)
+        retriever = BookerRetriever(paths["db"], paths["index"], paths.get("meta"), paths.get("cover"))
+        try:
+            result = answer_question(request.question, retriever, k=request.k)
+            return result
+        finally:
+            retriever.close()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/ask/stream")
-async def ask_question_stream(request: QuestionRequest):
+@app.post("/ask/{book_id}/stream")
+async def ask_question_stream(book_id: str, request: QuestionRequest):
     """
     Answer a question with streaming response.
     
     Args:
+        book_id: The book identifier
         request: Question request containing the question and optional k parameter
     
     Returns:
         Server-sent events stream with answer chunks and sources
     """
     try:
+        paths = resolve_paths(book_id)
+        retriever = BookerRetriever(paths["db"], paths["index"], paths.get("meta"), paths.get("cover"))
+        
         def generate_stream():
-            for chunk in answer_question_stream(request.question, k=request.k):
-                yield f"data: {json.dumps(chunk)}\n\n"
-            yield "data: [DONE]\n\n"
+            try:
+                for chunk in answer_question_stream(request.question, retriever, k=request.k):
+                    yield f"data: {json.dumps(chunk)}\n\n"
+                yield "data: [DONE]\n\n"
+            finally:
+                retriever.close()
         
         return StreamingResponse(
             generate_stream(),

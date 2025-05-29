@@ -4,6 +4,7 @@ Retrieval module for finding similar chunks using FAISS and DuckDB.
 
 import pickle
 from typing import List, Dict, Any, Optional
+from pathlib import Path
 
 import duckdb
 import faiss
@@ -19,18 +20,20 @@ openai.api_key = settings.OPENAI_API_KEY
 class BookerRetriever:
     """Handles semantic search and retrieval of book chunks."""
     
-    def __init__(self):
+    def __init__(self, db_path: Path, index_path: Path, meta_path: Path = None, cover_path: Path = None):
         """Initialize the retriever with FAISS index and database connection."""
-        self.db_conn = duckdb.connect(str(settings.DB_PATH))
+        self.db_conn = duckdb.connect(str(db_path))
         self.faiss_index: Optional[faiss.IndexFlatIP] = None
         self.chunk_metadata: List[Dict[str, Any]] = []
+        self.index_path = index_path
+        self.index_meta_path = index_path.parent / "booker.pkl"
         self._load_index()
     
     def _load_index(self) -> None:
         """Load FAISS index and metadata."""
-        if settings.INDEX_PATH.exists() and settings.INDEX_META_PATH.exists():
-            self.faiss_index = faiss.read_index(str(settings.INDEX_PATH))
-            with open(settings.INDEX_META_PATH, 'rb') as f:
+        if self.index_path.exists() and self.index_meta_path.exists():
+            self.faiss_index = faiss.read_index(str(self.index_path))
+            with open(self.index_meta_path, 'rb') as f:
                 self.chunk_metadata = pickle.load(f)
         else:
             raise FileNotFoundError("FAISS index not found. Please run ingestion first.")

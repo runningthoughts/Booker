@@ -14,20 +14,12 @@ EMBED_MODEL = "text-embedding-3-large"
 LLM_MODEL = "gpt-4o-mini"
 
 # Chunking Configuration
-CHUNK_SIZE = 1500  # tokens
-CHUNK_OVERLAP = 200  # tokens
+CHUNK_SIZE = 800  # tokens
+CHUNK_OVERLAP = 80  # tokens
 
 # Directory Paths
 PROJECT_ROOT = Path(__file__).parent.parent
-DATA_DIR = PROJECT_ROOT / "data"
-DB_PATH = PROJECT_ROOT / "db" / "booker.db"
-INDEX_PATH = PROJECT_ROOT / "indexes" / "booker.faiss"
-INDEX_META_PATH = PROJECT_ROOT / "indexes" / "booker.pkl"
-SIDECAR_DIR = PROJECT_ROOT / "sidecars"
-
-# Ensure directories exist
-for path in [DB_PATH.parent, INDEX_PATH.parent, SIDECAR_DIR]:
-    path.mkdir(parents=True, exist_ok=True)
+BOOKS_ROOT = Path(os.getenv("BOOKS_ROOT", PROJECT_ROOT / "library"))
 
 # Batch processing
-BATCH_SIZE = 16  # For OpenAI API calls 
+BATCH_SIZE = 16  # For OpenAI API calls

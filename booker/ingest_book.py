@@ -2,6 +2,7 @@
 Book ingestion module for processing PDFs and EPUBs into searchable chunks.
 """
 
+import argparse
 import json
 import logging
 import pickle
@@ -17,6 +18,8 @@ import tiktoken
 from pypdf import PdfReader
 
 from . import settings
+from .settings import BOOKS_ROOT
+from .splitters import HeadingAwareTextSplitter
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -36,10 +39,23 @@ except OSError:
 class BookerIngestor:
     """Handles the ingestion of books into the Booker system."""
     
-    def __init__(self):
+    def __init__(self, db_path: Path, index_dir: Path, sidecar_dir: Path):
         """Initialize the ingestor with tokenizer and database connection."""
         self.tokenizer = tiktoken.get_encoding("cl100k_base")
-        self.db_conn = duckdb.connect(str(settings.DB_PATH))
+        self.text_splitter = HeadingAwareTextSplitter(
+            chunk_size=settings.CHUNK_SIZE,
+            chunk_overlap=settings.CHUNK_OVERLAP
+        )
+        self.db_path = db_path
+        self.index_path = index_dir / "booker.faiss"
+        self.index_meta_path = index_dir / "booker.pkl"
+        self.sidecar_dir = sidecar_dir
+        
+        # Ensure directories exist
+        for path in [self.db_path.parent, index_dir, sidecar_dir]:
+            path.mkdir(parents=True, exist_ok=True)
+        
+        self.db_conn = duckdb.connect(str(self.db_path))
         self.faiss_index: Optional[faiss.IndexFlatIP] = None
         self.chunk_metadata: List[Dict[str, Any]] = []
         self._setup_database()
@@ -56,7 +72,10 @@ class BookerIngestor:
                 chapter_title TEXT,
                 page_start    INTEGER,
                 page_end      INTEGER,
-                text          TEXT
+                text          TEXT,
+                heading       TEXT,
+                heading_level INTEGER,
+                heading_type  TEXT
             )
         """)
         
@@ -72,9 +91,9 @@ class BookerIngestor:
     
     def _load_or_create_index(self) -> None:
         """Load existing FAISS index or create a new one."""
-        if settings.INDEX_PATH.exists() and settings.INDEX_META_PATH.exists():
-            self.faiss_index = faiss.read_index(str(settings.INDEX_PATH))
-            with open(settings.INDEX_META_PATH, 'rb') as f:
+        if self.index_path.exists() and self.index_meta_path.exists():
+            self.faiss_index = faiss.read_index(str(self.index_path))
+            with open(self.index_meta_path, 'rb') as f:
                 self.chunk_metadata = pickle.load(f)
             logger.info(f"Loaded existing FAISS index with {self.faiss_index.ntotal} vectors")
         else:
@@ -85,8 +104,8 @@ class BookerIngestor:
     
     def _save_index(self) -> None:
         """Save FAISS index and metadata to disk."""
-        faiss.write_index(self.faiss_index, str(settings.INDEX_PATH))
-        with open(settings.INDEX_META_PATH, 'wb') as f:
+        faiss.write_index(self.faiss_index, str(self.index_path))
+        with open(self.index_meta_path, 'wb') as f:
             pickle.dump(self.chunk_metadata, f)
         logger.info("FAISS index saved")
     
@@ -187,22 +206,23 @@ class BookerIngestor:
             logger.warning(f"Unsupported file type: {file_path.suffix}")
             return
         
-        # Chunk the text
-        chunks = self._chunk_text(text)
-        logger.info(f"Created {len(chunks)} chunks")
+        # Chunk the text using heading-aware splitter
+        documents = self.text_splitter.split_text(text)
+        logger.info(f"Created {len(documents)} chunks")
         
         # Process chunks in batches
         chunk_cards = []
         recaps = []
         
-        for i in range(0, len(chunks), settings.BATCH_SIZE):
-            batch_chunks = chunks[i:i + settings.BATCH_SIZE]
+        for i in range(0, len(documents), settings.BATCH_SIZE):
+            batch_docs = documents[i:i + settings.BATCH_SIZE]
+            batch_texts = [doc.text for doc in batch_docs]
             
             # Get embeddings for batch
-            embeddings = self._get_embeddings(batch_chunks)
+            embeddings = self._get_embeddings(batch_texts)
             
             # Process each chunk in the batch
-            for j, (chunk_text, embedding) in enumerate(zip(batch_chunks, embeddings)):
+            for j, (doc, embedding) in enumerate(zip(batch_docs, embeddings)):
                 chunk_idx = i + j
                 
                 # Add to FAISS index
@@ -213,17 +233,20 @@ class BookerIngestor:
                 # Insert into database
                 chunk_id = self.faiss_index.ntotal  # Use FAISS index as chunk_id
                 self.db_conn.execute("""
-                    INSERT INTO chunks (chunk_id, book_id, file_name, chapter_no, chapter_title, page_start, page_end, text)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO chunks (chunk_id, book_id, file_name, chapter_no, chapter_title, 
+                                      page_start, page_end, text, heading, heading_level, heading_type)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (chunk_id, file_path.stem, file_path.name, 1, "Chapter 1", 
-                     chunk_idx * 10, (chunk_idx + 1) * 10, chunk_text))
+                     chunk_idx * 10, (chunk_idx + 1) * 10, doc.text,
+                     doc.metadata.get('heading'), doc.metadata.get('heading_level'), 
+                     doc.metadata.get('heading_type')))
                 
                 # Generate summary
-                recap = self._summarize_chunk(chunk_text)
+                recap = self._summarize_chunk(doc.text)
                 recaps.append(recap)
                 
                 # Extract entities and keywords
-                entities_data = self._extract_entities(chunk_text)
+                entities_data = self._extract_entities(doc.text)
                 
                 # Insert summary
                 self.db_conn.execute("""
@@ -240,7 +263,10 @@ class BookerIngestor:
                     "page_range": f"{chunk_idx * 10}-{(chunk_idx + 1) * 10}",
                     "summary": recap,
                     "keywords": entities_data["keywords"],
-                    "entities": entities_data["entities"]
+                    "entities": entities_data["entities"],
+                    "heading": doc.metadata.get('heading'),
+                    "heading_level": doc.metadata.get('heading_level'),
+                    "heading_type": doc.metadata.get('heading_type')
                 }
                 chunk_cards.append(chunk_card)
                 
@@ -249,7 +275,10 @@ class BookerIngestor:
                     "chunk_id": chunk_id,
                     "file_name": file_path.name,
                     "page_start": chunk_idx * 10,
-                    "page_end": (chunk_idx + 1) * 10
+                    "page_end": (chunk_idx + 1) * 10,
+                    "heading": doc.metadata.get('heading'),
+                    "heading_level": doc.metadata.get('heading_level'),
+                    "heading_type": doc.metadata.get('heading_type')
                 })
         
         # Generate chapter summary
@@ -264,7 +293,7 @@ class BookerIngestor:
             "chunks": chunk_cards
         }
         
-        sidecar_path = settings.SIDECAR_DIR / f"{file_path.stem}_summaries.json"
+        sidecar_path = self.sidecar_dir / f"{file_path.stem}_summaries.json"
         with open(sidecar_path, 'w') as f:
             json.dump(sidecar_data, f, indent=2)
         
@@ -276,10 +305,10 @@ class BookerIngestor:
         
         logger.info(f"Successfully processed {file_path.name}")
     
-    def ingest_all_books(self) -> None:
+    def ingest_all_books(self, data_dir: Path) -> None:
         """Process all books in the data directory."""
-        pdf_files = sorted(settings.DATA_DIR.glob("*.pdf"))
-        epub_files = sorted(settings.DATA_DIR.glob("*.epub"))
+        pdf_files = sorted(data_dir.glob("*.pdf"))
+        epub_files = sorted(data_dir.glob("*.epub"))
         
         all_files = pdf_files + epub_files
         
@@ -305,9 +334,27 @@ class BookerIngestor:
 
 def main():
     """Main entry point for book ingestion."""
-    ingestor = BookerIngestor()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--books-root", default=None,
+                        help="Parent folder where all publications live (default: library)")
+    parser.add_argument("--book-id", required=True,
+                        help="Folder name of the publication to ingest")
+    args = parser.parse_args()
+
+    books_root = Path(args.books_root) if args.books_root else BOOKS_ROOT
+    book_id    = args.book_id
+    src_dir    = books_root / book_id / "source"
+    base_dir   = books_root / book_id / "build"
+    data_dir   = src_dir
+    db_path    = base_dir / "db" / "booker.db"
+    index_dir  = base_dir / "indexes"
+    sidecar_dir= base_dir / "sidecars"
+    for p in (base_dir, db_path.parent, index_dir, sidecar_dir):
+        p.mkdir(parents=True, exist_ok=True)
+
+    ingestor = BookerIngestor(db_path, index_dir, sidecar_dir)
     try:
-        ingestor.ingest_all_books()
+        ingestor.ingest_all_books(data_dir)
     finally:
         ingestor.close()
 

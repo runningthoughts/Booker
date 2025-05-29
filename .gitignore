@@ -4,6 +4,7 @@ data/
 db/
 indexes/
 sidecars/
+library/
 
 # Python
 __pycache__/
