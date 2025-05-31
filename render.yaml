@@ -18,6 +18,16 @@ services:
         value: https://booker-chat-app.s3.us-east-2.amazonaws.com/
       - key: PYTHONUNBUFFERED        # nice to have for real-time logs
         value: "1"
+      # AWS credentials - will be prompted for during Blueprint creation
+      - key: AWS_ACCESS_KEY_ID
+        sync: false              # Prompt for value in Render Dashboard
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false              # Prompt for value in Render Dashboard
+      - key: AWS_DEFAULT_REGION
+        value: us-east-2         # Safe to hardcode region
+      # Optional: if you're using S3 buckets
+      - key: AWS_S3_BUCKET_NAME
+        sync: false              # Prompt for value in Render Dashboard
 
 # 2️⃣  Static site  (React)
 - name: booker-ui            # final URL → https://booker-ui.onrender.com
