@@ -1,8 +1,8 @@
 # render.yaml  ← place in the repo root
 #######################################
 
-# 1️⃣  Web-service  (FastAPI)
 services:
+  # 1️⃣  Web-service  (FastAPI)
   - name: booker-api          # final URL → https://booker-api.onrender.com
     type: web                 # <-- 'web_service', not just 'web'
     plan: free                # free instance; sleeps after 15 min
@@ -29,15 +29,15 @@ services:
       - key: AWS_S3_BUCKET_NAME
         sync: false              # Prompt for value in Render Dashboard
 
-# 2️⃣  Static site  (React)
-- name: booker-ui            # final URL → https://booker-ui.onrender.com
-  type: web                  # Static sites are type 'web'
-  runtime: static            # Runtime is 'static' for static sites
-  rootDir: ui                # where package.json lives
-  buildCommand: |
-    npm ci
-    npm run build            # Vite creates ui/dist/
-  staticPublishPath: dist
-  envVars:
-    - key: VITE_API_URL      # React knows where to talk
-      value: https://booker-api.onrender.com
+  # 2️⃣  Static site  (React)
+  - name: booker-ui            # final URL → https://booker-ui.onrender.com
+    type: web                  # Static sites are type 'web'
+    runtime: static            # Runtime is 'static' for static sites
+    rootDir: ui                # where package.json lives
+    buildCommand: |
+      npm ci
+      npm run build            # Vite creates ui/dist/
+    staticPublishPath: dist
+    envVars:
+      - key: VITE_API_URL      # React knows where to talk
+        value: https://booker-api.onrender.com
