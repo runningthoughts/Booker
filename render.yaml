@@ -1,0 +1,24 @@
+services:
+  # ---------- React front-end ----------
+  - name: booker-ui
+    type: static
+    rootDir: ui
+    buildCommand: npm ci && npm run build
+    staticPublishPath: dist
+    envVars:
+      - key: VITE_API_URL
+        value: https://booker-api.onrender.com
+
+  # ---------- Python FastAPI back-end ----------
+  - name: booker-api
+    type: web          # web service
+    plan: free         # stays on the free tier
+    rootDir: .         # Changed to root directory to access all modules
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: cd api && uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: DATA_BASE_URL
+        value: https://booker-data-usw2.s3.amazonaws.com   # we'll create this bucket later
+      - key: PYTHONPATH
+        value: /opt/render/project/src   # Ensures Python can find all modules
