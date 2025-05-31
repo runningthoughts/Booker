@@ -4,7 +4,7 @@
 # 1️⃣  Web-service  (FastAPI)
 services:
   - name: booker-api          # final URL → https://booker-api.onrender.com
-    type: web                 # <-- ‘web_service’, not just ‘web’
+    type: web                 # <-- 'web_service', not just 'web'
     plan: free                # free instance; sleeps after 15 min
     runtime: python           # Render picks a Python image
     rootDir: .                # build at repo-root so requirements.txt is visible
@@ -20,13 +20,14 @@ services:
         value: "1"
 
 # 2️⃣  Static site  (React)
-staticPublishPath:
-  - name: booker-ui            # final URL → https://booker-ui.onrender.com
-    rootDir: ui                # where package.json lives
-    buildCommand: |
-      npm ci
-      npm run build            # Vite creates ui/dist/
-    staticPublishPath: dist
-    envVars:
-      - key: VITE_API_URL      # React knows where to talk
-        value: https://booker-api.onrender.com
+- name: booker-ui            # final URL → https://booker-ui.onrender.com
+  type: web                  # Static sites are type 'web'
+  runtime: static            # Runtime is 'static' for static sites
+  rootDir: ui                # where package.json lives
+  buildCommand: |
+    npm ci
+    npm run build            # Vite creates ui/dist/
+  staticPublishPath: dist
+  envVars:
+    - key: VITE_API_URL      # React knows where to talk
+      value: https://booker-api.onrender.com
