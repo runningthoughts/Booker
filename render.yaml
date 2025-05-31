@@ -20,7 +20,7 @@ services:
         value: "1"
 
 # 2️⃣  Static site  (React)
-staticSites:
+staticPublishPath:
   - name: booker-ui            # final URL → https://booker-ui.onrender.com
     rootDir: ui                # where package.json lives
     buildCommand: |
