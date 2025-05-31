@@ -4,7 +4,7 @@
 # 1️⃣  Web-service  (FastAPI)
 services:
   - name: booker-api          # final URL → https://booker-api.onrender.com
-    type: web_service         # <-- ‘web_service’, not just ‘web’
+    type: web                 # <-- ‘web_service’, not just ‘web’
     plan: free                # free instance; sleeps after 15 min
     runtime: python           # Render picks a Python image
     rootDir: .                # build at repo-root so requirements.txt is visible
