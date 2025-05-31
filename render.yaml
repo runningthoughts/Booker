@@ -1,24 +1,32 @@
-services:
-  # ---------- React front-end ----------
-  - name: booker-ui
-    type: static
-    rootDir: ui
-    buildCommand: npm ci && npm run build
-    staticPublishPath: dist
-    envVars:
-      - key: VITE_API_URL
-        value: https://booker-api.onrender.com
+# render.yaml  ← place in the repo root
+#######################################
 
-  # ---------- Python FastAPI back-end ----------
-  - name: booker-api
-    type: web          # web service
-    plan: free         # stays on the free tier
-    rootDir: .         # Changed to root directory to access all modules
-    runtime: python
-    buildCommand: pip install -r requirements.txt
-    startCommand: cd api && uvicorn main:app --host 0.0.0.0 --port $PORT
+# 1️⃣  Web-service  (FastAPI)
+services:
+  - name: booker-api          # final URL → https://booker-api.onrender.com
+    type: web_service         # <-- ‘web_service’, not just ‘web’
+    plan: free                # free instance; sleeps after 15 min
+    runtime: python           # Render picks a Python image
+    rootDir: .                # build at repo-root so requirements.txt is visible
+    buildCommand: |
+      pip install -r requirements.txt
+      pip install -e .               # makes your `booker/` package importable
+    startCommand: |
+      uvicorn api.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: DATA_BASE_URL
-        value: https://booker-data-usw2.s3.amazonaws.com   # we'll create this bucket later
-      - key: PYTHONPATH
-        value: /opt/render/project/src   # Ensures Python can find all modules
+        value: https://booker-chat-app.s3.us-east-2.amazonaws.com/
+      - key: PYTHONUNBUFFERED        # nice to have for real-time logs
+        value: "1"
+
+# 2️⃣  Static site  (React)
+staticSites:
+  - name: booker-ui            # final URL → https://booker-ui.onrender.com
+    rootDir: ui                # where package.json lives
+    buildCommand: |
+      npm ci
+      npm run build            # Vite creates ui/dist/
+    staticPublishPath: dist
+    envVars:
+      - key: VITE_API_URL      # React knows where to talk
+        value: https://booker-api.onrender.com
