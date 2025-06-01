@@ -20,42 +20,54 @@ const BookerChat = () => {
   // Function to load book assets
   const loadBookAssets = async (bookId) => {
     try {
-      // Try to load title.json
-      const titleResponse = await fetch(`http://localhost:8000/library/${bookId}/assets/title.json`)
-      if (titleResponse.ok) {
-        const metadata = await titleResponse.json()
-        setBookMetadata(metadata)
-      }
-    } catch (error) {
-      console.log('No title.json found for book:', bookId)
-    }
-
-    try {
-      // Try to load cover.png
-      const coverResponse = await fetch(`http://localhost:8000/library/${bookId}/assets/cover.png`)
-      if (coverResponse.ok) {
-        const coverUrl = `http://localhost:8000/library/${bookId}/assets/cover.png`
-        setCoverImage(coverUrl)
+      // Get asset URLs from the API - this handles both local and S3 environments
+      const assetsResponse = await fetch(`/api/book/${bookId}/assets`)
+      if (assetsResponse.ok) {
+        const assets = await assetsResponse.json()
         
-        // Create an image element to check dimensions
-        const img = new Image()
-        img.onload = () => {
-          // Determine layout based on aspect ratio
-          const aspectRatio = img.width / img.height
-          setImageLayout(aspectRatio > 1.5 ? 'horizontal' : 'vertical')
+        // Try to load title.json
+        try {
+          const titleResponse = await fetch(assets.title_url)
+          if (titleResponse.ok) {
+            const metadata = await titleResponse.json()
+            setBookMetadata(metadata)
+          }
+        } catch (error) {
+          console.log('No title.json found for book:', bookId)
         }
-        img.src = coverUrl
+
+        // Try to load cover image
+        try {
+          const coverResponse = await fetch(assets.cover_url)
+          if (coverResponse.ok) {
+            setCoverImage(assets.cover_url)
+            
+            // Create an image element to check dimensions
+            const img = new Image()
+            img.onload = () => {
+              // Determine layout based on aspect ratio
+              const aspectRatio = img.width / img.height
+              setImageLayout(aspectRatio > 1.5 ? 'horizontal' : 'vertical')
+            }
+            img.src = assets.cover_url
+          }
+        } catch (error) {
+          console.log('No cover image found for book:', bookId)
+        }
       }
     } catch (error) {
-      console.log('No cover.png found for book:', bookId)
+      console.log('Error loading book assets:', error)
     }
   }
 
   useEffect(() => {
-    // Get bookId from URL query parameters
+    // Get bookId from URL query parameters (case-insensitive)
     const urlParams = new URLSearchParams(window.location.search)
-    const bookIdParam = urlParams.get('bookId')
+    let bookIdParam = urlParams.get('bookId') || urlParams.get('bookid') || urlParams.get('BookId') || urlParams.get('BOOKID')
+    
     if (bookIdParam) {
+      // Convert to lowercase for consistency
+      bookIdParam = bookIdParam.toLowerCase()
       setBookId(bookIdParam)
       loadBookAssets(bookIdParam)
     } else {
