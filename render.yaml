@@ -18,6 +18,8 @@ services:
         value: https://booker-chat-app.s3.us-east-2.amazonaws.com/
       - key: PYTHONUNBUFFERED        # nice to have for real-time logs
         value: "1"
+      # Import all variables from your environment group
+      - fromGroup: booker-secrets    # Replace with your actual environment group name
       # AWS credentials - will be prompted for during Blueprint creation
       - key: AWS_ACCESS_KEY_ID
         sync: false              # Prompt for value in Render Dashboard

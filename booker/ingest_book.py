@@ -341,14 +341,30 @@ def main():
                         help="Folder name of the publication to ingest")
     args = parser.parse_args()
 
-    books_root = Path(args.books_root) if args.books_root else BOOKS_ROOT
-    book_id    = args.book_id
-    src_dir    = books_root / book_id / "source"
-    base_dir   = books_root / book_id / "build"
-    data_dir   = src_dir
-    db_path    = base_dir / "db" / "booker.db"
-    index_dir  = base_dir / "indexes"
-    sidecar_dir= base_dir / "sidecars"
+    book_id = args.book_id
+    
+    # Determine paths - handle both old and new utility system
+    if args.books_root:
+        books_root = Path(args.books_root)
+        src_dir = books_root / book_id / "source"
+        base_dir = books_root / book_id / "build"
+    else:
+        # Try to use new utility functions if available
+        try:
+            from .utils import get_book_source_path, get_book_build_path
+            src_dir = get_book_source_path(book_id)
+            base_dir = get_book_build_path(book_id)
+        except ImportError:
+            # Fallback to old behavior
+            src_dir = BOOKS_ROOT / book_id / "source"
+            base_dir = BOOKS_ROOT / book_id / "build"
+    
+    data_dir = src_dir
+    db_path = base_dir / "db" / "booker.db"
+    index_dir = base_dir / "indexes"
+    sidecar_dir = base_dir / "sidecars"
+    
+    # Ensure directories exist
     for p in (base_dir, db_path.parent, index_dir, sidecar_dir):
         p.mkdir(parents=True, exist_ok=True)
 

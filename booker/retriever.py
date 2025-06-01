@@ -20,7 +20,7 @@ openai.api_key = settings.OPENAI_API_KEY
 class BookerRetriever:
     """Handles semantic search and retrieval of book chunks."""
     
-    def __init__(self, db_path: Path, index_path: Path, meta_path: Path = None, cover_path: Path = None):
+    def __init__(self, db_path: Path, index_path: Path):
         """Initialize the retriever with FAISS index and database connection."""
         self.db_conn = duckdb.connect(str(db_path))
         self.faiss_index: Optional[faiss.IndexFlatIP] = None

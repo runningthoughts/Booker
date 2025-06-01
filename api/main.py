@@ -6,15 +6,22 @@ import json
 from pathlib import Path
 from typing import Dict, Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from booker.qa import answer_question, answer_question_stream
 from booker.retriever import BookerRetriever
-from booker.settings import BOOKS_ROOT
+from booker.utils import resolve_book_paths, get_book_asset_url
+
+
+class StaticFilesWithoutCaching(StaticFiles):
+    """StaticFiles subclass that disables HTTP caching for development."""
+    def is_not_modified(self, *args, **kwargs) -> bool:
+        return False
+
 
 app = FastAPI(title="Booker API", description="RAG-based book Q&A system")
 
@@ -27,17 +34,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.mount("/library", StaticFiles(directory="library"), name="library")
-
-
-def resolve_paths(book_id: str):
-    base = BOOKS_ROOT / book_id / "build"
-    return {
-        "db":    base / "db" / "booker.db",
-        "index": base / "indexes" / "booker.faiss",
-        "meta":  BOOKS_ROOT / book_id / "assets" / "book_meta.json",
-        "cover": BOOKS_ROOT / book_id / "assets" / "cover.jpg"
-    }
+# Only mount static files if running locally (library folder exists)
+library_path = Path("library")
+if library_path.exists():
+    app.mount("/library", StaticFilesWithoutCaching(directory="library"), name="library")
 
 
 class QuestionRequest(BaseModel):
@@ -57,6 +57,33 @@ async def health_check() -> HealthResponse:
     return HealthResponse(status="ok")
 
 
+@app.get("/book/{book_id}/assets")
+async def get_book_assets(book_id: str):
+    """
+    Get asset URLs for a book (title.json, cover image).
+    Returns URLs that work in both local and S3 environments.
+    
+    Args:
+        book_id: The book identifier
+    
+    Returns:
+        Dictionary containing asset URLs
+    """
+    data = {
+        "title_url": get_book_asset_url(book_id, "assets/title.json"),
+        "cover_url": get_book_asset_url(book_id, "assets/cover.png")
+    }
+    
+    # Add no-cache headers to prevent caching of metadata
+    headers = {
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        "Pragma": "no-cache",
+        "Expires": "0"
+    }
+    
+    return JSONResponse(content=data, headers=headers)
+
+
 @app.post("/ask/{book_id}")
 async def ask_question(book_id: str, request: QuestionRequest) -> Dict[str, Any]:
     """
@@ -70,8 +97,8 @@ async def ask_question(book_id: str, request: QuestionRequest) -> Dict[str, Any]
         Dictionary containing the answer and sources
     """
     try:
-        paths = resolve_paths(book_id)
-        retriever = BookerRetriever(paths["db"], paths["index"], paths.get("meta"), paths.get("cover"))
+        paths = resolve_book_paths(book_id)
+        retriever = BookerRetriever(paths["db"], paths["index"])
         try:
             result = answer_question(request.question, retriever, k=request.k)
             return result
@@ -94,8 +121,8 @@ async def ask_question_stream(book_id: str, request: QuestionRequest):
         Server-sent events stream with answer chunks and sources
     """
     try:
-        paths = resolve_paths(book_id)
-        retriever = BookerRetriever(paths["db"], paths["index"], paths.get("meta"), paths.get("cover"))
+        paths = resolve_book_paths(book_id)
+        retriever = BookerRetriever(paths["db"], paths["index"])
         
         def generate_stream():
             try:

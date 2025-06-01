@@ -17,9 +17,21 @@ LLM_MODEL = "gpt-4o-mini"
 CHUNK_SIZE = 800  # tokens
 CHUNK_OVERLAP = 80  # tokens
 
+# Environment Detection
+IS_PRODUCTION = bool(os.getenv("DATA_BASE_URL"))  # Render sets this env var
+
 # Directory Paths
 PROJECT_ROOT = Path(__file__).parent.parent
-BOOKS_ROOT = Path(os.getenv("BOOKS_ROOT", PROJECT_ROOT / "library"))
+
+# Data source configuration - bi-operational for local and cloud
+if IS_PRODUCTION:
+    # Running on Render - use S3 bucket
+    DATA_BASE_URL = os.getenv("DATA_BASE_URL")
+    BOOKS_ROOT = Path(os.getenv("BOOKS_ROOT", PROJECT_ROOT / "library"))  # Still need local path for build artifacts
+else:
+    # Running locally - use local library folder
+    DATA_BASE_URL = None
+    BOOKS_ROOT = Path(os.getenv("BOOKS_ROOT", PROJECT_ROOT / "library"))
 
 # Batch processing
 BATCH_SIZE = 16  # For OpenAI API calls
