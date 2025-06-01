@@ -19,7 +19,7 @@ services:
       - key: PYTHONUNBUFFERED        # nice to have for real-time logs
         value: "1"
       # Import all variables from your environment group
-      - fromGroup: booker-secrets    # Replace with your actual environment group name
+      - fromGroup: Booker Secrets    # Use exact name as it appears in Render dashboard
       # AWS credentials - will be prompted for during Blueprint creation
       - key: AWS_ACCESS_KEY_ID
         sync: false              # Prompt for value in Render Dashboard
