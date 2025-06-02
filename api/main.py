@@ -58,6 +58,7 @@ async def health_check() -> HealthResponse:
 
 
 @app.get("/")
+@app.head("/")
 async def root():
     """Root endpoint for Render health checks."""
     return {"message": "Booker API is running", "status": "ok"}

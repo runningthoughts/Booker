@@ -22,7 +22,7 @@ const BookerChat = () => {
     try {
       // Determine API base URL based on environment
       const apiBaseUrl = window.location.hostname === 'booker-ui.onrender.com' 
-        ? 'https://booker-api.onrender.com' 
+        ? 'https://booker-api-56am.onrender.com' 
         : ''
       
       // Get DATA_BASE_URL from backend settings
