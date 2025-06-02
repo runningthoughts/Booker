@@ -18,6 +18,9 @@ services:
         value: https://booker-chat-app.s3.us-east-2.amazonaws.com/
       - key: PYTHONUNBUFFERED        # nice to have for real-time logs
         value: "1"
+      # OpenAI API Key - REQUIRED for the application to work
+      - key: ragtagKey
+        sync: false              # Prompt for value in Render Dashboard
       # Import all variables from your environment group
       - fromGroup: Booker Secrets    # Use exact name as it appears in Render dashboard
       # AWS credentials - will be prompted for during Blueprint creation
@@ -40,6 +43,4 @@ services:
       npm ci
       npm run build            # Vite creates ui/dist/
     staticPublishPath: dist
-    envVars:
-      - key: VITE_API_URL      # React knows where to talk
-        value: https://booker-api.onrender.com
+

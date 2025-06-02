@@ -57,6 +57,12 @@ async def health_check() -> HealthResponse:
     return HealthResponse(status="ok")
 
 
+@app.get("/")
+async def root():
+    """Root endpoint for Render health checks."""
+    return {"message": "Booker API is running", "status": "ok"}
+
+
 @app.get("/config")
 async def get_config():
     """Get configuration values for the frontend."""
