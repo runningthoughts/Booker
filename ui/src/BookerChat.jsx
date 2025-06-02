@@ -20,40 +20,55 @@ const BookerChat = () => {
   // Function to load book assets
   const loadBookAssets = async (bookId) => {
     try {
-      // Get asset URLs from the API - this handles both local and S3 environments
-      const assetsResponse = await fetch(`/api/book/${bookId}/assets`)
-      if (assetsResponse.ok) {
-        const assets = await assetsResponse.json()
-        
-        // Try to load title.json
-        try {
-          const titleResponse = await fetch(assets.title_url)
-          if (titleResponse.ok) {
-            const metadata = await titleResponse.json()
-            setBookMetadata(metadata)
+      // Determine API base URL based on environment
+      const apiBaseUrl = window.location.hostname === 'booker-ui.onrender.com' 
+        ? 'https://booker-api.onrender.com' 
+        : ''
+      
+      // Get DATA_BASE_URL from backend settings
+      const configResponse = await fetch(`${apiBaseUrl}/config`)
+      let baseUrl = '/library/' // default for development
+      
+      if (configResponse.ok) {
+        const config = await configResponse.json()
+        if (config.is_production && config.data_base_url) {
+          baseUrl = config.data_base_url
+          if (!baseUrl.endsWith('/')) {
+            baseUrl += '/'
           }
-        } catch (error) {
-          console.log('No title.json found for book:', bookId)
         }
+      }
+      
+      const bookUrl = `${baseUrl}${bookId}/`
+      
+      // Try to load title.json
+      try {
+        const titleResponse = await fetch(`${bookUrl}title.json`)
+        if (titleResponse.ok) {
+          const metadata = await titleResponse.json()
+          setBookMetadata(metadata)
+        }
+      } catch (error) {
+        console.log('No title.json found for book:', bookId)
+      }
 
-        // Try to load cover image
-        try {
-          const coverResponse = await fetch(assets.cover_url)
-          if (coverResponse.ok) {
-            setCoverImage(assets.cover_url)
-            
-            // Create an image element to check dimensions
-            const img = new Image()
-            img.onload = () => {
-              // Determine layout based on aspect ratio
-              const aspectRatio = img.width / img.height
-              setImageLayout(aspectRatio > 1.5 ? 'horizontal' : 'vertical')
-            }
-            img.src = assets.cover_url
+      // Try to load cover image
+      try {
+        const coverResponse = await fetch(`${bookUrl}cover.jpg`)
+        if (coverResponse.ok) {
+          setCoverImage(`${bookUrl}cover.jpg`)
+          
+          // Create an image element to check dimensions
+          const img = new Image()
+          img.onload = () => {
+            // Determine layout based on aspect ratio
+            const aspectRatio = img.width / img.height
+            setImageLayout(aspectRatio > 1.5 ? 'horizontal' : 'vertical')
           }
-        } catch (error) {
-          console.log('No cover image found for book:', bookId)
+          img.src = `${bookUrl}cover.jpg`
         }
+      } catch (error) {
+        console.log('No cover image found for book:', bookId)
       }
     } catch (error) {
       console.log('Error loading book assets:', error)

@@ -57,6 +57,16 @@ async def health_check() -> HealthResponse:
     return HealthResponse(status="ok")
 
 
+@app.get("/config")
+async def get_config():
+    """Get configuration values for the frontend."""
+    from booker import settings
+    return {
+        "data_base_url": settings.DATA_BASE_URL,
+        "is_production": settings.IS_PRODUCTION
+    }
+
+
 @app.get("/book/{book_id}/assets")
 async def get_book_assets(book_id: str):
     """
