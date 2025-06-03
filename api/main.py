@@ -162,6 +162,42 @@ async def ask_question_stream(book_id: str, request: QuestionRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/debug/{book_id}")
+async def debug_book_files(book_id: str):
+    """Debug endpoint to check what files exist for a book."""
+    from booker.utils import resolve_book_paths
+    from booker import settings
+    
+    try:
+        paths = resolve_book_paths(book_id)
+        
+        debug_info = {
+            "book_id": book_id,
+            "is_production": settings.IS_PRODUCTION,
+            "books_root": str(settings.BOOKS_ROOT),
+            "data_base_url": settings.DATA_BASE_URL,
+            "file_checks": {}
+        }
+        
+        # Check if each required file exists
+        for key, path in paths.items():
+            if hasattr(path, 'exists'):  # It's a Path object
+                debug_info["file_checks"][key] = {
+                    "path": str(path),
+                    "exists": path.exists(),
+                    "is_file": path.is_file() if path.exists() else False
+                }
+            else:  # It's a URL
+                debug_info["file_checks"][key] = {
+                    "url": str(path),
+                    "type": "url"
+                }
+        
+        return debug_info
+    except Exception as e:
+        return {"error": str(e), "book_id": book_id}
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000) 
