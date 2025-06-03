@@ -16,6 +16,7 @@ const BookerChat = () => {
   const [coverImage, setCoverImage] = useState(null)
   const [imageLayout, setImageLayout] = useState('vertical') // 'vertical' or 'horizontal'
   const messagesEndRef = useRef(null)
+  const inputRef = useRef(null) // Add ref for the input field
 
   // Function to load book assets
   const loadBookAssets = async (bookId) => {
@@ -94,6 +95,13 @@ const BookerChat = () => {
         sources: []
       }])
     }
+    
+    // Focus the input field when component mounts
+    setTimeout(() => {
+      if (inputRef.current) {
+        inputRef.current.focus()
+      }
+    }, 100) // Small delay to ensure DOM is ready
   }, [])
 
   const scrollToBottom = () => {
@@ -102,7 +110,14 @@ const BookerChat = () => {
 
   useEffect(() => {
     scrollToBottom()
-  }, [messages])
+    
+    // Focus the input field after assistant responds (when loading stops)
+    if (!isLoading && inputRef.current) {
+      setTimeout(() => {
+        inputRef.current.focus()
+      }, 100) // Small delay to ensure the response is fully rendered
+    }
+  }, [messages, isLoading])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -740,6 +755,7 @@ const BookerChat = () => {
         <form onSubmit={handleSubmit} className="input-form">
           <div className="input-wrapper">
             <textarea
+              ref={inputRef}
               className="input-field"
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
