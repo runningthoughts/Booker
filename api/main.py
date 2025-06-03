@@ -113,6 +113,8 @@ async def ask_question(book_id: str, request: QuestionRequest) -> Dict[str, Any]
     Returns:
         Dictionary containing the answer and sources
     """
+    import shutil
+    
     try:
         paths = resolve_book_paths(book_id)
         retriever = BookerRetriever(paths["db"], paths["index"])
@@ -121,6 +123,9 @@ async def ask_question(book_id: str, request: QuestionRequest) -> Dict[str, Any]
             return result
         finally:
             retriever.close()
+            # Clean up temporary files in production
+            if "temp_dir" in paths:
+                shutil.rmtree(paths["temp_dir"], ignore_errors=True)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -137,6 +142,8 @@ async def ask_question_stream(book_id: str, request: QuestionRequest):
     Returns:
         Server-sent events stream with answer chunks and sources
     """
+    import shutil
+    
     try:
         paths = resolve_book_paths(book_id)
         retriever = BookerRetriever(paths["db"], paths["index"])
@@ -148,6 +155,9 @@ async def ask_question_stream(book_id: str, request: QuestionRequest):
                 yield "data: [DONE]\n\n"
             finally:
                 retriever.close()
+                # Clean up temporary files in production
+                if "temp_dir" in paths:
+                    shutil.rmtree(paths["temp_dir"], ignore_errors=True)
         
         return StreamingResponse(
             generate_stream(),
