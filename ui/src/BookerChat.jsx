@@ -1,4 +1,32 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react'
+import React, { useState, useRef, useEffect, useCallback, memo } from 'react'
+
+// SpinUpMessage component - moved outside to prevent recreation
+const SpinUpMessage = memo(({ isSpinningUp, spinUpCountdown }) => {
+  if (!isSpinningUp) return null
+
+  const progress = ((60 - spinUpCountdown) / 60) * 100
+
+  return (
+    <div className="spin-up-overlay">
+      <div className="spin-up-message">
+        <div className="spin-up-icon">⚙️</div>
+        <h3 className="spin-up-title">Waking the hamsters…</h3>
+        <p className="spin-up-text">
+          our free-tier server takes a catnap after 15 minutes. Give it up to 60 seconds to stretch, yawn, and start answering your questions!
+        </p>
+        <div className="progress-container">
+          <div className="progress-bar">
+            <div 
+              className="progress-fill" 
+              style={{ width: `${progress}%` }}
+            ></div>
+          </div>
+          <div className="countdown-text">{spinUpCountdown}s remaining</div>
+        </div>
+      </div>
+    </div>
+  )
+})
 
 const BookerChat = () => {
   const [messages, setMessages] = useState([
@@ -339,34 +367,6 @@ const BookerChat = () => {
             </div>
           </div>
         )}
-      </div>
-    )
-  }
-
-  // SpinUpMessage component
-  const SpinUpMessage = () => {
-    if (!isSpinningUp) return null
-
-    const progress = ((60 - spinUpCountdown) / 60) * 100
-
-    return (
-      <div className="spin-up-overlay">
-        <div className="spin-up-message">
-          <div className="spin-up-icon">⚙️</div>
-          <h3 className="spin-up-title">Waking the hamsters…</h3>
-          <p className="spin-up-text">
-            our free-tier server takes a catnap after 15 minutes. Give it up to 60 seconds to stretch, yawn, and start answering your questions!
-          </p>
-          <div className="progress-container">
-            <div className="progress-bar">
-              <div 
-                className="progress-fill" 
-                style={{ width: `${progress}%` }}
-              ></div>
-            </div>
-            <div className="countdown-text">{spinUpCountdown}s remaining</div>
-          </div>
-        </div>
       </div>
     )
   }
@@ -918,7 +918,7 @@ const BookerChat = () => {
         </form>
       </div>
 
-      <SpinUpMessage />
+      <SpinUpMessage isSpinningUp={isSpinningUp} spinUpCountdown={spinUpCountdown} />
     </div>
   )
 }
