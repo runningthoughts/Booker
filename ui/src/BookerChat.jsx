@@ -39,7 +39,7 @@ const BookerChat = () => {
         }
       }
       
-      const bookUrl = `${baseUrl}${bookId}/`
+      const bookUrl = `${baseUrl}${bookId}/assets/`
       
       // Try to load title.json
       try {
@@ -54,9 +54,9 @@ const BookerChat = () => {
 
       // Try to load cover image
       try {
-        const coverResponse = await fetch(`${bookUrl}cover.jpg`)
+        const coverResponse = await fetch(`${bookUrl}cover.png`)
         if (coverResponse.ok) {
-          setCoverImage(`${bookUrl}cover.jpg`)
+          setCoverImage(`${bookUrl}cover.png`)
           
           // Create an image element to check dimensions
           const img = new Image()
@@ -65,7 +65,7 @@ const BookerChat = () => {
             const aspectRatio = img.width / img.height
             setImageLayout(aspectRatio > 1.5 ? 'horizontal' : 'vertical')
           }
-          img.src = `${bookUrl}cover.jpg`
+          img.src = `${bookUrl}cover.png`
         }
       } catch (error) {
         console.log('No cover image found for book:', bookId)
