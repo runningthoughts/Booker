@@ -120,7 +120,12 @@ const BookerChat = () => {
     setIsLoading(true)
 
     try {
-      const response = await fetch(`/api/ask/${bookId}`, {
+      // Determine API base URL based on environment (same logic as loadBookAssets)
+      const apiBaseUrl = window.location.hostname === 'booker-ui.onrender.com' 
+        ? 'https://booker-api-56am.onrender.com' 
+        : ''
+      
+      const response = await fetch(`${apiBaseUrl}/api/ask/${bookId}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -131,11 +136,32 @@ const BookerChat = () => {
         }),
       })
 
+      console.log('API URL:', `${apiBaseUrl}/api/ask/${bookId}`)
+      console.log('Response status:', response.status)
+      console.log('Response headers:', response.headers)
+
       if (!response.ok) {
-        throw new Error('Failed to get response')
+        const errorText = await response.text()
+        console.error('API Error Response:', errorText)
+        throw new Error(`API returned ${response.status}: ${errorText}`)
       }
 
-      const data = await response.json()
+      // Check if response has content
+      const responseText = await response.text()
+      console.log('Raw response:', responseText)
+      
+      if (!responseText.trim()) {
+        throw new Error('Empty response from server')
+      }
+
+      let data
+      try {
+        data = JSON.parse(responseText)
+      } catch (jsonError) {
+        console.error('JSON Parse Error:', jsonError)
+        console.error('Response text that failed to parse:', responseText)
+        throw new Error(`Invalid JSON response: ${jsonError.message}`)
+      }
       
       const assistantMessage = {
         id: Date.now() + 1,
@@ -150,7 +176,7 @@ const BookerChat = () => {
       const errorMessage = {
         id: Date.now() + 1,
         type: 'assistant',
-        content: 'Sorry, I encountered an error while processing your question. Please try again.',
+        content: `Error: ${error.message}. Please check the console for more details.`,
         sources: []
       }
       setMessages(prev => [...prev, errorMessage])
