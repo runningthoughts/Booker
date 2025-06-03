@@ -69,21 +69,30 @@ def resolve_book_paths(book_id: str) -> dict:
     Returns:
         Dictionary with all relevant paths
     """
-    build_base = get_book_build_path(book_id)
-    
-    paths = {
-        "db": build_base / "db" / "booker.db",
-        "index": build_base / "indexes" / "booker.faiss",
-        "meta": build_base / "indexes" / "booker.pkl",
-    }
-    
-    # Add asset URLs for the current environment
     if settings.IS_PRODUCTION:
-        # In production, assets come from S3
-        paths["title_url"] = get_book_asset_url(book_id, "assets/title.json")
-        paths["cover_url"] = get_book_asset_url(book_id, "assets/cover.png")
+        # In production, use S3 URLs for database files (no /library/ prefix)
+        base_url = settings.DATA_BASE_URL
+        if not base_url.endswith('/'):
+            base_url += '/'
+        
+        paths = {
+            "db": f"{base_url}{book_id}/build/db/booker.db",
+            "index": f"{base_url}{book_id}/build/indexes/booker.faiss",
+            "meta": f"{base_url}{book_id}/build/indexes/booker.pkl",
+            "title_url": get_book_asset_url(book_id, "assets/title.json"),
+            "cover_url": get_book_asset_url(book_id, "assets/cover.png")
+        }
     else:
-        # Locally, assets come from local files
+        # Local development - use local file paths
+        build_base = get_book_build_path(book_id)
+        
+        paths = {
+            "db": build_base / "db" / "booker.db",
+            "index": build_base / "indexes" / "booker.faiss",
+            "meta": build_base / "indexes" / "booker.pkl",
+        }
+        
+        # Add asset URLs for local environment
         local_assets = settings.BOOKS_ROOT / book_id / "assets"
         paths["title_url"] = f"/library/{book_id}/assets/title.json"
         paths["cover_url"] = f"/library/{book_id}/assets/cover.png"
