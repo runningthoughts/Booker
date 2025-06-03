@@ -120,12 +120,29 @@ const BookerChat = () => {
     setIsLoading(true)
 
     try {
-      // Determine API base URL based on environment (same logic as loadBookAssets)
+      // Use same logic as loadBookAssets to get the correct base URL
       const apiBaseUrl = window.location.hostname === 'booker-ui.onrender.com' 
         ? 'https://booker-api-56am.onrender.com' 
         : ''
       
-      const response = await fetch(`${apiBaseUrl}/api/ask/${bookId}`, {
+      // Get DATA_BASE_URL from backend settings (same as loadBookAssets)
+      const configResponse = await fetch(`${apiBaseUrl}/config`)
+      let baseUrl = '/library/' // default for development
+      
+      if (configResponse.ok) {
+        const config = await configResponse.json()
+        if (config.is_production && config.data_base_url) {
+          baseUrl = config.data_base_url
+          if (!baseUrl.endsWith('/')) {
+            baseUrl += '/'
+          }
+        }
+      }
+      
+      // Use same pattern as assets: baseUrl + bookId + /build/ (instead of /assets/)
+      const apiUrl = `${baseUrl}${bookId}/build/ask`
+      
+      const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -136,7 +153,7 @@ const BookerChat = () => {
         }),
       })
 
-      console.log('API URL:', `${apiBaseUrl}/api/ask/${bookId}`)
+      console.log('API URL:', apiUrl)
       console.log('Response status:', response.status)
       console.log('Response headers:', response.headers)
 
