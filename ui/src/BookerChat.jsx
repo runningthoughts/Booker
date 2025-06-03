@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect, useCallback } from 'react'
 
 const BookerChat = () => {
   const [messages, setMessages] = useState([
@@ -16,7 +16,7 @@ const BookerChat = () => {
   const [coverImage, setCoverImage] = useState(null)
   const [imageLayout, setImageLayout] = useState('vertical') // 'vertical' or 'horizontal'
   const [isSpinningUp, setIsSpinningUp] = useState(false)
-  const [spinUpCountdown, setSpinUpCountdown] = useState(50)
+  const [spinUpCountdown, setSpinUpCountdown] = useState(60)
   const messagesEndRef = useRef(null)
   const inputRef = useRef(null) // Add ref for the input field
 
@@ -93,7 +93,7 @@ const BookerChat = () => {
       // Show spin up message only on production
       if (window.location.hostname === 'booker-ui.onrender.com') {
         setIsSpinningUp(true)
-        setSpinUpCountdown(50)
+        setSpinUpCountdown(60)
       }
       
       loadBookAssets(bookIdParam)
@@ -116,21 +116,22 @@ const BookerChat = () => {
   }, [])
 
   // Countdown timer for spin up
+  const updateCountdown = useCallback(() => {
+    setSpinUpCountdown(prev => {
+      if (prev <= 1) {
+        setIsSpinningUp(false)
+        return 0
+      }
+      return prev - 1
+    })
+  }, [])
+
   useEffect(() => {
     if (!isSpinningUp) return
 
-    const timer = setInterval(() => {
-      setSpinUpCountdown(prev => {
-        if (prev <= 1) {
-          setIsSpinningUp(false)
-          return 0
-        }
-        return prev - 1
-      })
-    }, 1000)
-
+    const timer = setInterval(updateCountdown, 1000)
     return () => clearInterval(timer)
-  }, [isSpinningUp])
+  }, [isSpinningUp, updateCountdown])
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -346,7 +347,7 @@ const BookerChat = () => {
   const SpinUpMessage = () => {
     if (!isSpinningUp) return null
 
-    const progress = ((50 - spinUpCountdown) / 50) * 100
+    const progress = ((60 - spinUpCountdown) / 60) * 100
 
     return (
       <div className="spin-up-overlay">
