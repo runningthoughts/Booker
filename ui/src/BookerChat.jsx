@@ -19,7 +19,6 @@ const BookerChat = () => {
   const [spinUpCountdown, setSpinUpCountdown] = useState(50)
   const messagesEndRef = useRef(null)
   const inputRef = useRef(null) // Add ref for the input field
-  const spinUpTimerRef = useRef(null)
 
   // Function to load book assets
   const loadBookAssets = async (bookId) => {
@@ -51,7 +50,6 @@ const BookerChat = () => {
         if (titleResponse.ok) {
           const metadata = await titleResponse.json()
           setBookMetadata(metadata)
-          // Clear spin up message once we successfully load book assets
           setIsSpinningUp(false)
         }
       } catch (error) {
@@ -63,7 +61,6 @@ const BookerChat = () => {
         const coverResponse = await fetch(`${bookUrl}cover.png`)
         if (coverResponse.ok) {
           setCoverImage(`${bookUrl}cover.png`)
-          // Clear spin up message once we successfully load book assets
           setIsSpinningUp(false)
           
           // Create an image element to check dimensions
@@ -80,8 +77,6 @@ const BookerChat = () => {
       }
     } catch (error) {
       console.log('Error loading book assets:', error)
-      // If there's an error, still clear the spin up message after a delay
-      setTimeout(() => setIsSpinningUp(false), 5000)
     }
   }
 
@@ -122,27 +117,19 @@ const BookerChat = () => {
 
   // Countdown timer for spin up
   useEffect(() => {
-    if (isSpinningUp && spinUpCountdown > 0) {
-      spinUpTimerRef.current = setTimeout(() => {
-        setSpinUpCountdown(prev => prev - 1)
-      }, 1000)
-    } else if (spinUpCountdown <= 0) {
-      setIsSpinningUp(false)
-    }
+    if (!isSpinningUp) return
 
-    return () => {
-      if (spinUpTimerRef.current) {
-        clearTimeout(spinUpTimerRef.current)
-      }
-    }
-  }, [isSpinningUp, spinUpCountdown])
+    const timer = setInterval(() => {
+      setSpinUpCountdown(prev => {
+        if (prev <= 1) {
+          setIsSpinningUp(false)
+          return 0
+        }
+        return prev - 1
+      })
+    }, 1000)
 
-  // Clear timer when component unmounts or spin up stops
-  useEffect(() => {
-    if (!isSpinningUp && spinUpTimerRef.current) {
-      clearTimeout(spinUpTimerRef.current)
-      spinUpTimerRef.current = null
-    }
+    return () => clearInterval(timer)
   }, [isSpinningUp])
 
   const scrollToBottom = () => {
@@ -355,7 +342,7 @@ const BookerChat = () => {
     )
   }
 
-  // SpinUpMessage component for showing backend wake-up status
+  // SpinUpMessage component
   const SpinUpMessage = () => {
     if (!isSpinningUp) return null
 
@@ -395,87 +382,6 @@ const BookerChat = () => {
           background: white;
           box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
           position: relative;
-        }
-
-        .spin-up-overlay {
-          position: absolute;
-          top: 0;
-          left: 0;
-          right: 0;
-          bottom: 0;
-          background: rgba(255, 255, 255, 0.95);
-          backdrop-filter: blur(5px);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          z-index: 1000;
-          animation: fadeIn 0.3s ease-in;
-        }
-
-        .spin-up-message {
-          background: white;
-          border-radius: 16px;
-          padding: 2rem;
-          box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
-          max-width: 500px;
-          text-align: center;
-          border: 1px solid #e1e5e9;
-        }
-
-        .spin-up-icon {
-          font-size: 3rem;
-          margin-bottom: 1rem;
-          animation: spin 2s linear infinite;
-        }
-
-        .spin-up-title {
-          margin: 0 0 1rem 0;
-          font-size: 1.5rem;
-          font-weight: 600;
-          color: #333;
-        }
-
-        .spin-up-text {
-          margin: 0 0 1.5rem 0;
-          color: #666;
-          line-height: 1.5;
-          font-size: 0.95rem;
-        }
-
-        .progress-container {
-          margin-top: 1.5rem;
-        }
-
-        .progress-bar {
-          width: 100%;
-          height: 8px;
-          background: #e1e5e9;
-          border-radius: 4px;
-          overflow: hidden;
-          margin-bottom: 0.75rem;
-        }
-
-        .progress-fill {
-          height: 100%;
-          background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
-          border-radius: 4px;
-          transition: width 1s ease;
-        }
-
-        .countdown-text {
-          font-size: 0.9rem;
-          color: #667eea;
-          font-weight: 600;
-        }
-
-        @keyframes fadeIn {
-          from { opacity: 0; transform: translateY(20px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-
-        @keyframes spin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
         }
 
         .header {
@@ -873,6 +779,87 @@ const BookerChat = () => {
           margin-top: 0.5rem;
           padding-top: 0.5rem;
           border-top: 1px solid #eee;
+        }
+
+        .spin-up-overlay {
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: rgba(255, 255, 255, 0.95);
+          backdrop-filter: blur(5px);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 1000;
+          animation: fadeIn 0.3s ease-in;
+        }
+
+        .spin-up-message {
+          background: white;
+          border-radius: 16px;
+          padding: 2rem;
+          box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+          max-width: 500px;
+          text-align: center;
+          border: 1px solid #e1e5e9;
+        }
+
+        .spin-up-icon {
+          font-size: 3rem;
+          margin-bottom: 1rem;
+          animation: spin 2s linear infinite;
+        }
+
+        .spin-up-title {
+          margin: 0 0 1rem 0;
+          font-size: 1.5rem;
+          font-weight: 600;
+          color: #333;
+        }
+
+        .spin-up-text {
+          margin: 0 0 1.5rem 0;
+          color: #666;
+          line-height: 1.5;
+          font-size: 0.95rem;
+        }
+
+        .progress-container {
+          margin-top: 1.5rem;
+        }
+
+        .progress-bar {
+          width: 100%;
+          height: 8px;
+          background: #e1e5e9;
+          border-radius: 4px;
+          overflow: hidden;
+          margin-bottom: 0.75rem;
+        }
+
+        .progress-fill {
+          height: 100%;
+          background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+          border-radius: 4px;
+          transition: width 1s ease;
+        }
+
+        .countdown-text {
+          font-size: 0.9rem;
+          color: #667eea;
+          font-weight: 600;
+        }
+
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(20px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
         }
       `}</style>
 
