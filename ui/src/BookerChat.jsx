@@ -125,7 +125,7 @@ const BookerChat = () => {
         ? 'https://booker-api-56am.onrender.com' 
         : ''
       
-      const response = await fetch(`${apiBaseUrl}/library/${bookId}/build/ask`, {
+      const response = await fetch(`${apiBaseUrl}/ask/${bookId}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -136,7 +136,7 @@ const BookerChat = () => {
         }),
       })
 
-      console.log('API URL:', `${apiBaseUrl}/library/${bookId}/build/ask`)
+      console.log('API URL:', `${apiBaseUrl}/ask/${bookId}`)
       console.log('Response status:', response.status)
       console.log('Response headers:', response.headers)
 
