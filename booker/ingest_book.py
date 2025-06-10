@@ -1,5 +1,6 @@
 """
 Book ingestion module for processing PDFs and EPUBs into searchable chunks.
+Supports both individual books and hierarchical "bodies of work".
 """
 
 import argparse
@@ -7,7 +8,8 @@ import json
 import logging
 import pickle
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
+from enum import Enum
 
 import duckdb
 import faiss
@@ -36,8 +38,22 @@ except OSError:
     nlp = None
 
 
+class SourceType(Enum):
+    """Enumeration for different source material types."""
+    BOOK = "book"  # Individual files directly in source directory
+    BODY_OF_WORK = "body_of_work"  # Numbered subdirectories with hierarchy
+
+
+class ImportanceLevel(Enum):
+    """Enumeration for content importance levels."""
+    PRIMARY = 0      # Main content (from 0/ directory)
+    SECONDARY = 1    # Supporting material (from 1/ directory)
+    TERTIARY = 2     # Additional supporting material (from 2/ directory)
+    QUATERNARY = 3   # Further supporting material (from 3/ directory)
+
+
 class BookerIngestor:
-    """Handles the ingestion of books into the Booker system."""
+    """Handles the ingestion of books and bodies of work into the Booker system."""
     
     def __init__(self, db_path: Path, index_dir: Path, sidecar_dir: Path):
         """Initialize the ingestor with tokenizer and database connection."""
@@ -62,7 +78,8 @@ class BookerIngestor:
         self._load_or_create_index()
     
     def _setup_database(self) -> None:
-        """Create database tables if they don't exist."""
+        """Create database tables if they don't exist and migrate existing ones."""
+        # Create tables if they don't exist
         self.db_conn.execute("""
             CREATE TABLE IF NOT EXISTS chunks (
                 chunk_id      INTEGER PRIMARY KEY,
@@ -75,7 +92,10 @@ class BookerIngestor:
                 text          TEXT,
                 heading       TEXT,
                 heading_level INTEGER,
-                heading_type  TEXT
+                heading_type  TEXT,
+                source_type   TEXT,
+                importance_level INTEGER,
+                source_directory TEXT
             )
         """)
         
@@ -87,6 +107,29 @@ class BookerIngestor:
                 entities   TEXT
             )
         """)
+        
+        # Migrate existing chunks table if needed
+        try:
+            # Check if new columns exist
+            result = self.db_conn.execute("PRAGMA table_info(chunks)").fetchall()
+            existing_columns = {row[1] for row in result}  # row[1] is column name
+            
+            # Add missing columns
+            if 'source_type' not in existing_columns:
+                self.db_conn.execute("ALTER TABLE chunks ADD COLUMN source_type TEXT DEFAULT 'book'")
+                logger.info("Added source_type column to chunks table")
+            
+            if 'importance_level' not in existing_columns:
+                self.db_conn.execute("ALTER TABLE chunks ADD COLUMN importance_level INTEGER DEFAULT 0")
+                logger.info("Added importance_level column to chunks table")
+            
+            if 'source_directory' not in existing_columns:
+                self.db_conn.execute("ALTER TABLE chunks ADD COLUMN source_directory TEXT DEFAULT ''")
+                logger.info("Added source_directory column to chunks table")
+                
+        except Exception as e:
+            logger.warning(f"Error during database migration: {e}")
+        
         logger.info("Database tables initialized")
     
     def _load_or_create_index(self) -> None:
@@ -108,6 +151,39 @@ class BookerIngestor:
         with open(self.index_meta_path, 'wb') as f:
             pickle.dump(self.chunk_metadata, f)
         logger.info("FAISS index saved")
+    
+    def _detect_source_type(self, source_dir: Path) -> SourceType:
+        """Detect whether source is a book or body of work format."""
+        # Check for numbered subdirectories (0, 1, 2, etc.)
+        numbered_dirs = []
+        for item in source_dir.iterdir():
+            if item.is_dir() and item.name.isdigit():
+                numbered_dirs.append(int(item.name))
+        
+        # If we have a 0 directory, it's a body of work
+        if 0 in numbered_dirs:
+            logger.info(f"Detected body of work format with directories: {sorted(numbered_dirs)}")
+            return SourceType.BODY_OF_WORK
+        else:
+            # Look for files directly in source directory
+            pdf_files = list(source_dir.glob("*.pdf"))
+            epub_files = list(source_dir.glob("*.epub"))
+            if pdf_files or epub_files:
+                logger.info(f"Detected book format with {len(pdf_files)} PDFs and {len(epub_files)} EPUBs")
+                return SourceType.BOOK
+            else:
+                logger.warning("No recognizable content found in source directory")
+                return SourceType.BOOK  # Default fallback
+    
+    def _get_importance_level(self, directory_number: int) -> ImportanceLevel:
+        """Map directory number to importance level."""
+        importance_map = {
+            0: ImportanceLevel.PRIMARY,
+            1: ImportanceLevel.SECONDARY,
+            2: ImportanceLevel.TERTIARY,
+            3: ImportanceLevel.QUATERNARY
+        }
+        return importance_map.get(directory_number, ImportanceLevel.QUATERNARY)
     
     def _chunk_text(self, text: str) -> List[str]:
         """Split text into overlapping chunks based on token count."""
@@ -135,14 +211,23 @@ class BookerIngestor:
         )
         return [data.embedding for data in response.data]
     
-    def _summarize_chunk(self, text: str) -> str:
-        """Generate a summary for a text chunk."""
+    def _summarize_chunk(self, text: str, importance_level: ImportanceLevel) -> str:
+        """Generate a summary for a text chunk, considering its importance level."""
+        importance_context = {
+            ImportanceLevel.PRIMARY: "primary source material",
+            ImportanceLevel.SECONDARY: "supporting material", 
+            ImportanceLevel.TERTIARY: "additional supporting material",
+            ImportanceLevel.QUATERNARY: "supplementary material"
+        }
+        
+        context = importance_context.get(importance_level, "source material")
+        
         response = openai.chat.completions.create(
             model=settings.LLM_MODEL,
             messages=[
                 {
                     "role": "system",
-                    "content": "Summarise this excerpt from the book in ≤2 sentences, dense with key info, no new facts."
+                    "content": f"Summarise this excerpt from {context} in ≤2 sentences, dense with key info, no new facts."
                 },
                 {"role": "user", "content": text}
             ],
@@ -163,7 +248,7 @@ class BookerIngestor:
         
         return {"entities": entities, "keywords": list(set(keywords))}
     
-    def _generate_chapter_summary(self, recaps: List[str]) -> str:
+    def _generate_chapter_summary(self, recaps: List[str], importance_level: ImportanceLevel) -> str:
         """Generate a chapter summary from individual chunk recaps."""
         combined_recaps = " ".join(recaps)
         
@@ -173,12 +258,21 @@ class BookerIngestor:
             tokens = tokens[:2000]
             combined_recaps = self.tokenizer.decode(tokens)
         
+        importance_context = {
+            ImportanceLevel.PRIMARY: "primary source material",
+            ImportanceLevel.SECONDARY: "supporting material",
+            ImportanceLevel.TERTIARY: "additional supporting material", 
+            ImportanceLevel.QUATERNARY: "supplementary material"
+        }
+        
+        context = importance_context.get(importance_level, "source material")
+        
         response = openai.chat.completions.create(
             model=settings.LLM_MODEL,
             messages=[
                 {
                     "role": "system",
-                    "content": "Summarise the following bullet-point recaps of a book chapter in one coherent paragraph, ≤100 tokens."
+                    "content": f"Summarise the following bullet-point recaps of {context} in one coherent paragraph, ≤100 tokens."
                 },
                 {"role": "user", "content": combined_recaps}
             ],
@@ -195,16 +289,18 @@ class BookerIngestor:
             text += page.extract_text() + "\n"
         return text
     
-    def process_file(self, file_path: Path) -> None:
-        """Process a single book file (PDF or EPUB)."""
-        logger.info(f"Processing file: {file_path.name}")
+    def process_file(self, file_path: Path, source_type: SourceType, 
+                    importance_level: ImportanceLevel = ImportanceLevel.PRIMARY, 
+                    source_directory: str = "") -> List[Dict[str, Any]]:
+        """Process a single book file (PDF or EPUB) and return chunk cards."""
+        logger.info(f"Processing file: {file_path.name} (importance: {importance_level.name})")
         
         # Extract text based on file type
         if file_path.suffix.lower() == '.pdf':
             text = self._extract_text_from_pdf(file_path)
         else:
             logger.warning(f"Unsupported file type: {file_path.suffix}")
-            return
+            return []
         
         # Chunk the text using heading-aware splitter
         documents = self.text_splitter.split_text(text)
@@ -234,15 +330,17 @@ class BookerIngestor:
                 chunk_id = self.faiss_index.ntotal  # Use FAISS index as chunk_id
                 self.db_conn.execute("""
                     INSERT INTO chunks (chunk_id, book_id, file_name, chapter_no, chapter_title, 
-                                      page_start, page_end, text, heading, heading_level, heading_type)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (chunk_id, file_path.stem, file_path.name, 1, "Chapter 1", 
+                                      page_start, page_end, text, heading, heading_level, heading_type,
+                                      source_type, importance_level, source_directory)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (chunk_id, file_path.parent.parent.name, file_path.name, 1, "Chapter 1", 
                      chunk_idx * 10, (chunk_idx + 1) * 10, doc.text,
                      doc.metadata.get('heading'), doc.metadata.get('heading_level'), 
-                     doc.metadata.get('heading_type')))
+                     doc.metadata.get('heading_type'), source_type.value, importance_level.value,
+                     source_directory))
                 
                 # Generate summary
-                recap = self._summarize_chunk(doc.text)
+                recap = self._summarize_chunk(doc.text, importance_level)
                 recaps.append(recap)
                 
                 # Extract entities and keywords
@@ -266,7 +364,12 @@ class BookerIngestor:
                     "entities": entities_data["entities"],
                     "heading": doc.metadata.get('heading'),
                     "heading_level": doc.metadata.get('heading_level'),
-                    "heading_type": doc.metadata.get('heading_type')
+                    "heading_type": doc.metadata.get('heading_type'),
+                    "source_type": source_type.value,
+                    "importance_level": importance_level.value,
+                    "importance_name": importance_level.name,
+                    "source_directory": source_directory,
+                    "file_name": file_path.name
                 }
                 chunk_cards.append(chunk_card)
                 
@@ -278,22 +381,171 @@ class BookerIngestor:
                     "page_end": (chunk_idx + 1) * 10,
                     "heading": doc.metadata.get('heading'),
                     "heading_level": doc.metadata.get('heading_level'),
-                    "heading_type": doc.metadata.get('heading_type')
+                    "heading_type": doc.metadata.get('heading_type'),
+                    "source_type": source_type.value,
+                    "importance_level": importance_level.value,
+                    "source_directory": source_directory
                 })
         
-        # Generate chapter summary
-        chapter_summary = self._generate_chapter_summary(recaps)
+        return chunk_cards, recaps
+    
+    def process_body_of_work(self, source_dir: Path, work_id: str) -> None:
+        """Process a hierarchical body of work with numbered subdirectories."""
+        logger.info(f"Processing body of work: {work_id}")
         
-        # Create sidecar JSON
+        # Find all numbered subdirectories
+        numbered_dirs = []
+        for item in source_dir.iterdir():
+            if item.is_dir() and item.name.isdigit():
+                numbered_dirs.append((int(item.name), item))
+        
+        # Sort by number (importance order)
+        numbered_dirs.sort(key=lambda x: x[0])
+        
+        all_chunk_cards = {}  # Organized by directory
+        all_recaps = {}
+        
+        for dir_num, dir_path in numbered_dirs:
+            importance_level = self._get_importance_level(dir_num)
+            logger.info(f"Processing directory {dir_num}/ with importance level: {importance_level.name}")
+            
+            # Find files in this directory
+            pdf_files = sorted(dir_path.glob("*.pdf"))
+            epub_files = sorted(dir_path.glob("*.epub"))
+            all_files = pdf_files + epub_files
+            
+            dir_chunk_cards = []
+            dir_recaps = []
+            
+            for file_path in all_files:
+                try:
+                    file_cards, file_recaps = self.process_file(
+                        file_path, 
+                        SourceType.BODY_OF_WORK, 
+                        importance_level,
+                        f"{dir_num}/"
+                    )
+                    dir_chunk_cards.extend(file_cards)
+                    dir_recaps.extend(file_recaps)
+                except Exception as e:
+                    logger.error(f"Error processing {file_path.name}: {e}")
+                    continue
+            
+            if dir_chunk_cards:
+                all_chunk_cards[dir_num] = dir_chunk_cards
+                all_recaps[dir_num] = dir_recaps
+        
+        # Generate hierarchical sidecar
         sidecar_data = {
-            "file": file_path.name,
-            "chapter_no": 1,
-            "chapter_title": "Chapter 1",
-            "chapter_summary": chapter_summary,
-            "chunks": chunk_cards
+            "work_id": work_id,
+            "source_type": SourceType.BODY_OF_WORK.value,
+            "structure": "hierarchical",
+            "directories": {}
         }
         
-        sidecar_path = self.sidecar_dir / f"{file_path.stem}_summaries.json"
+        # Add directory-level summaries and chunks
+        for dir_num in sorted(all_chunk_cards.keys()):
+            importance_level = self._get_importance_level(dir_num)
+            
+            # Generate directory summary
+            if all_recaps[dir_num]:
+                dir_summary = self._generate_chapter_summary(all_recaps[dir_num], importance_level)
+            else:
+                dir_summary = f"No content processed for directory {dir_num}/"
+            
+            sidecar_data["directories"][str(dir_num)] = {
+                "directory": f"{dir_num}/",
+                "importance_level": importance_level.value,
+                "importance_name": importance_level.name,
+                "description": {
+                    0: "Primary source material - main content",
+                    1: "Supporting material - secondary importance", 
+                    2: "Additional supporting material - tertiary importance",
+                    3: "Supplementary material - quaternary importance"
+                }.get(dir_num, "Additional material"),
+                "directory_summary": dir_summary,
+                "chunk_count": len(all_chunk_cards[dir_num]),
+                "chunks": all_chunk_cards[dir_num]
+            }
+        
+        # Generate overall work summary focusing on primary content
+        if 0 in all_recaps and all_recaps[0]:
+            work_summary = self._generate_chapter_summary(all_recaps[0], ImportanceLevel.PRIMARY)
+        else:
+            # Fallback to first available directory
+            first_dir = min(all_recaps.keys()) if all_recaps else None
+            if first_dir is not None:
+                work_summary = self._generate_chapter_summary(
+                    all_recaps[first_dir], 
+                    self._get_importance_level(first_dir)
+                )
+            else:
+                work_summary = "No content available for summary"
+        
+        sidecar_data["work_summary"] = work_summary
+        sidecar_data["total_chunks"] = sum(len(cards) for cards in all_chunk_cards.values())
+        
+        # Save hierarchical sidecar
+        sidecar_path = self.sidecar_dir / f"{work_id}_body_of_work.json"
+        with open(sidecar_path, 'w') as f:
+            json.dump(sidecar_data, f, indent=2)
+        
+        logger.info(f"Created hierarchical sidecar file: {sidecar_path.name}")
+        
+        # Save index and commit database changes
+        self._save_index()
+        self.db_conn.commit()
+        
+        logger.info(f"Successfully processed body of work: {work_id}")
+    
+    def process_book(self, source_dir: Path, book_id: str) -> None:
+        """Process a traditional book with files directly in source directory."""
+        logger.info(f"Processing book: {book_id}")
+        
+        pdf_files = sorted(source_dir.glob("*.pdf"))
+        epub_files = sorted(source_dir.glob("*.epub"))
+        all_files = pdf_files + epub_files
+        
+        if not all_files:
+            logger.warning("No PDF or EPUB files found in source directory")
+            return
+        
+        all_chunk_cards = []
+        all_recaps = []
+        
+        for file_path in all_files:
+            try:
+                file_cards, file_recaps = self.process_file(
+                    file_path, 
+                    SourceType.BOOK, 
+                    ImportanceLevel.PRIMARY,
+                    ""
+                )
+                all_chunk_cards.extend(file_cards)
+                all_recaps.extend(file_recaps)
+            except Exception as e:
+                logger.error(f"Error processing {file_path.name}: {e}")
+                continue
+        
+        # Generate book summary
+        if all_recaps:
+            book_summary = self._generate_chapter_summary(all_recaps, ImportanceLevel.PRIMARY)
+        else:
+            book_summary = "No content available for summary"
+        
+        # Create traditional sidecar
+        sidecar_data = {
+            "book_id": book_id,
+            "source_type": SourceType.BOOK.value,
+            "structure": "flat",
+            "chapter_no": 1,
+            "chapter_title": "Chapter 1",
+            "chapter_summary": book_summary,
+            "total_chunks": len(all_chunk_cards),
+            "chunks": all_chunk_cards
+        }
+        
+        sidecar_path = self.sidecar_dir / f"{book_id}_summaries.json"
         with open(sidecar_path, 'w') as f:
             json.dump(sidecar_data, f, indent=2)
         
@@ -303,29 +555,16 @@ class BookerIngestor:
         self._save_index()
         self.db_conn.commit()
         
-        logger.info(f"Successfully processed {file_path.name}")
+        logger.info(f"Successfully processed book: {book_id}")
     
-    def ingest_all_books(self, data_dir: Path) -> None:
-        """Process all books in the data directory."""
-        pdf_files = sorted(data_dir.glob("*.pdf"))
-        epub_files = sorted(data_dir.glob("*.epub"))
+    def ingest_all_content(self, source_dir: Path, content_id: str) -> None:
+        """Process all content in the source directory, auto-detecting format."""
+        source_type = self._detect_source_type(source_dir)
         
-        all_files = pdf_files + epub_files
-        
-        if not all_files:
-            logger.warning("No PDF or EPUB files found in data directory")
-            return
-        
-        logger.info(f"Found {len(all_files)} files to process")
-        
-        for file_path in all_files:
-            try:
-                self.process_file(file_path)
-            except Exception as e:
-                logger.error(f"Error processing {file_path.name}: {e}")
-                continue
-        
-        logger.info("Book ingestion completed")
+        if source_type == SourceType.BODY_OF_WORK:
+            self.process_body_of_work(source_dir, content_id)
+        else:
+            self.process_book(source_dir, content_id)
     
     def close(self) -> None:
         """Close database connection."""
@@ -333,7 +572,7 @@ class BookerIngestor:
 
 
 def main():
-    """Main entry point for book ingestion."""
+    """Main entry point for content ingestion."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--books-root", default=None,
                         help="Parent folder where all publications live (default: library)")
@@ -341,23 +580,23 @@ def main():
                         help="Folder name of the publication to ingest")
     args = parser.parse_args()
 
-    book_id = args.book_id
+    content_id = args.book_id  # Can be book or body of work
     
     # Determine paths - handle both old and new utility system
     if args.books_root:
         books_root = Path(args.books_root)
-        src_dir = books_root / book_id / "source"
-        base_dir = books_root / book_id / "build"
+        src_dir = books_root / content_id / "source"
+        base_dir = books_root / content_id / "build"
     else:
         # Try to use new utility functions if available
         try:
             from .utils import get_book_source_path, get_book_build_path
-            src_dir = get_book_source_path(book_id)
-            base_dir = get_book_build_path(book_id)
+            src_dir = get_book_source_path(content_id)
+            base_dir = get_book_build_path(content_id)
         except ImportError:
             # Fallback to old behavior
-            src_dir = BOOKS_ROOT / book_id / "source"
-            base_dir = BOOKS_ROOT / book_id / "build"
+            src_dir = BOOKS_ROOT / content_id / "source"
+            base_dir = BOOKS_ROOT / content_id / "build"
     
     data_dir = src_dir
     db_path = base_dir / "db" / "booker.db"
@@ -370,7 +609,7 @@ def main():
 
     ingestor = BookerIngestor(db_path, index_dir, sidecar_dir)
     try:
-        ingestor.ingest_all_books(data_dir)
+        ingestor.ingest_all_content(data_dir, content_id)
     finally:
         ingestor.close()
 
