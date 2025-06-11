@@ -30,6 +30,17 @@ const SpinUpMessage = memo(({ isSpinningUp, spinUpCountdown }) => {
 })
 
 const BookerChat = () => {
+  // Generate or retrieve session ID from localStorage
+  const getSessionId = () => {
+    let sessionId = localStorage.getItem('booker-session-id')
+    if (!sessionId) {
+      sessionId = 'session-' + Math.random().toString(36).substr(2, 9) + '-' + Date.now()
+      localStorage.setItem('booker-session-id', sessionId)
+    }
+    return sessionId
+  }
+
+  const [sessionId] = useState(getSessionId())
   const [messages, setMessages] = useState([
     {
       id: 1,
@@ -202,6 +213,7 @@ const BookerChat = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'X-Session-ID': sessionId,
         },
         body: JSON.stringify({
           question: userMessage.content,
@@ -261,6 +273,41 @@ const BookerChat = () => {
   const openPDF = (fileName, pageStart) => {
     // In a real implementation, this would open the PDF at the specific page
     alert(`Opening ${fileName} at page ${pageStart}`)
+  }
+
+  const resetChat = async () => {
+    try {
+      // Determine API base URL (same logic as other requests)
+      const apiBaseUrl = window.location.hostname === 'booker-ui.onrender.com' 
+        ? 'https://booker-api-56am.onrender.com' 
+        : '/api'
+      
+      const response = await fetch(`${apiBaseUrl}/reset_memory`, {
+        method: 'POST',
+        headers: {
+          'X-Session-ID': sessionId,
+        },
+      })
+
+      if (response.ok) {
+        // Reset the frontend messages
+        setMessages([
+          {
+            id: 1,
+            type: 'assistant',
+            content: 'Hello! I\'m Booker, your AI assistant for book questions. Ask me anything about the books in your library.',
+            sources: []
+          }
+        ])
+        
+        // Focus the input field
+        if (inputRef.current) {
+          inputRef.current.focus()
+        }
+      }
+    } catch (error) {
+      console.error('Error resetting chat:', error)
+    }
   }
 
   const Citation = ({ source }) => (
@@ -375,8 +422,19 @@ const BookerChat = () => {
   return (
     <div className="booker-chat">
       <div className="header">
-        <h1>📚 Booker</h1>
-        <p>Ask questions about your books and get intelligent answers with citations</p>
+        <div className="header-content">
+          <div className="header-text">
+            <h1>📚 Booker</h1>
+            <p>Ask questions about your books and get intelligent answers with citations</p>
+          </div>
+          <button 
+            className="reset-button"
+            onClick={resetChat}
+            title="Reset chat history"
+          >
+            ⟳ Reset chat
+          </button>
+        </div>
       </div>
 
       <div className="messages-container">

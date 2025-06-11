@@ -8,12 +8,13 @@ import openai
 
 from . import settings
 from .retriever import BookerRetriever
+from .memory import get_chat_memory
 
 # Initialize OpenAI client
 openai.api_key = settings.OPENAI_API_KEY
 
 
-def answer_question(question: str, retriever: BookerRetriever, k: int = 5) -> Dict[str, Any]:
+def answer_question(question: str, retriever: BookerRetriever, k: int = 5, session_id: str = None) -> Dict[str, Any]:
     """
     Answer a question using retrieved book chunks and LLM generation.
     
@@ -21,6 +22,7 @@ def answer_question(question: str, retriever: BookerRetriever, k: int = 5) -> Di
         question: The user's question
         retriever: BookerRetriever instance
         k: Number of chunks to retrieve for context
+        session_id: Optional session ID for conversation memory
     
     Returns:
         Dictionary containing the answer and source information
@@ -55,18 +57,42 @@ def answer_question(question: str, retriever: BookerRetriever, k: int = 5) -> Di
         
         context = "\n\n".join(context_parts)
         
+        # Get conversation memory if session_id provided
+        memory_context = ""
+        if session_id:
+            memory = get_chat_memory(session_id)
+            memory_parts = []
+            
+            if memory.summary:
+                memory_parts.append(f"Conversation summary:\n{memory.summary}")
+            
+            recent_turns = memory.format_recent_turns()
+            if recent_turns:
+                memory_parts.append(f"Recent turns:\n{recent_turns}")
+            
+            if memory_parts:
+                memory_context = "\n\n".join(memory_parts) + "\n\n"
+        
         # Build prompt for LLM
+        system_prompt = ("You are an AI assistant who strictly answers from the provided book excerpts. "
+                        "Base your answer only on the information given in the context. "
+                        "If the context doesn't contain enough information to answer the question, "
+                        "say so clearly. When referencing information, mention the source number in brackets.")
+        
+        if memory_context:
+            system_prompt += (" Use the conversation summary and recent turns to maintain context, "
+                            "but always prioritize information from the book excerpts.")
+        
+        user_content = f"{memory_context}Relevant book excerpts:\n{context}\n\nUser: {question}"
+        
         messages = [
             {
                 "role": "system",
-                "content": "You are an AI assistant who strictly answers from the provided book excerpts. "
-                          "Base your answer only on the information given in the context. "
-                          "If the context doesn't contain enough information to answer the question, "
-                          "say so clearly. When referencing information, mention the source number in brackets."
+                "content": system_prompt
             },
             {
-                "role": "user",
-                "content": f"Question: {question}\n\nContext:\n{context}"
+                "role": "user", 
+                "content": user_content
             }
         ]
         
@@ -79,6 +105,11 @@ def answer_question(question: str, retriever: BookerRetriever, k: int = 5) -> Di
         )
         
         answer = response.choices[0].message.content.strip()
+        
+        # Add this turn to memory if session_id provided
+        if session_id:
+            memory = get_chat_memory(session_id)
+            memory.add_turn(question, answer)
         
         return {
             "answer": answer,

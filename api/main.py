@@ -6,15 +6,17 @@ import json
 from pathlib import Path
 from typing import Dict, Any
 
-from fastapi import FastAPI, HTTPException, Response
+from fastapi import FastAPI, HTTPException, Response, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from typing import Optional
 
 from booker.qa import answer_question, answer_question_stream
 from booker.retriever import BookerRetriever
 from booker.utils import resolve_book_paths, get_book_asset_url
+from booker.memory import reset_chat_memory
 
 
 class StaticFilesWithoutCaching(StaticFiles):
@@ -102,7 +104,11 @@ async def get_book_assets(book_id: str):
 
 
 @app.post("/ask/{book_id}")
-async def ask_question(book_id: str, request: QuestionRequest) -> Dict[str, Any]:
+async def ask_question(
+    book_id: str, 
+    request: QuestionRequest,
+    session_id: Optional[str] = Header(None, alias="X-Session-ID")
+) -> Dict[str, Any]:
     """
     Answer a question based on the ingested books.
     
@@ -119,7 +125,7 @@ async def ask_question(book_id: str, request: QuestionRequest) -> Dict[str, Any]
         paths = resolve_book_paths(book_id)
         retriever = BookerRetriever(paths["db"], paths["index"])
         try:
-            result = answer_question(request.question, retriever, k=request.k)
+            result = answer_question(request.question, retriever, k=request.k, session_id=session_id)
             return result
         finally:
             retriever.close()
@@ -168,6 +174,24 @@ async def ask_question_stream(book_id: str, request: QuestionRequest):
                 "Content-Type": "text/event-stream"
             }
         )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/reset_memory")
+async def reset_memory(session_id: str = Header(..., alias="X-Session-ID")):
+    """
+    Reset the chat memory for the given session.
+    
+    Args:
+        session_id: The session identifier from header
+    
+    Returns:
+        Success message
+    """
+    try:
+        reset_chat_memory(session_id)
+        return {"status": "success", "message": "Chat memory reset"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
