@@ -379,9 +379,9 @@ const BookerChat = () => {
         <p>Ask questions about your books and get intelligent answers with citations</p>
       </div>
 
-      <BookHeader />
-
       <div className="messages-container">
+        <BookHeader />
+        
         {messages.map((message) => (
           <Message key={message.id} message={message} />
         ))}
