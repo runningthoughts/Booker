@@ -125,7 +125,7 @@ async def ask_question(
         paths = resolve_book_paths(book_id)
         retriever = BookerRetriever(paths["db"], paths["index"])
         try:
-            result = answer_question(request.question, retriever, k=request.k, session_id=session_id)
+            result = answer_question(request.question, retriever, k=request.k, session_id=session_id, book_id=book_id)
             return result
         finally:
             retriever.close()

@@ -50,6 +50,16 @@ booker/
 - Node.js 16+ (for the frontend)
 - OpenAI API key
 
+### New: Intelligent Routing 🧠
+
+Booker now supports intelligent routing between local book content and global web search! See [docs/ROUTING.md](docs/ROUTING.md) for full details.
+
+**Key Features:**
+- **Smart metadata generation** with KeyBERT topic extraction
+- **LLM-powered routing** (LOCAL/GLOBAL/REJECT decisions)
+- **Environment-controlled** global search (disabled by default)
+- **Backward compatible** - existing setups continue working
+
 ### 1. Environment Setup
 
 ```bash
@@ -91,7 +101,11 @@ cp /path/to/your/book.pdf library/The_Gilded_Cage/source/
 ### 5. Ingest Your Books
 
 ```bash
+# Basic ingestion
 python -m booker.ingest_book --book-id The_Gilded_Cage
+
+# With intelligent routing metadata (NEW!)
+python -m booker.ingest_book --book-id The_Gilded_Cage --profile
 ```
 
 This will:
@@ -100,6 +114,7 @@ This will:
 - Generate summaries
 - Build searchable indexes
 - Create citation metadata
+- **NEW**: Generate book metadata for intelligent routing (with `--profile` flag)
 
 ### 6. Start the System
 
@@ -186,6 +201,7 @@ finally:
 
 - `ragtagKey`: Your OpenAI API key (required)
 - `BOOKS_ROOT`: Parent directory for all books (optional, defaults to `./library`)
+The intelligent routing system automatically enables when book metadata is present, no additional configuration needed.
 
 ### Settings (booker/settings.py)
 
@@ -233,6 +249,10 @@ pytest
 pytest tests/test_ingest.py
 pytest tests/test_qa_loop.py
 
+# Run new routing tests
+pytest tests/test_routing.py
+pytest tests/test_profile_book.py
+
 # Run with verbose output
 pytest -v
 ```
@@ -269,21 +289,32 @@ The tests use mocked OpenAI API calls to avoid costs during development.
 
 ## 🔍 How It Works
 
+### Core System
 1. **Ingestion**: Books are processed into overlapping text chunks
 2. **Embedding**: Each chunk is converted to a vector using OpenAI's embedding model
 3. **Indexing**: Vectors are stored in a FAISS index for fast similarity search
 4. **Summarization**: Each chunk gets a summary using GPT-4o-mini
 5. **Storage**: Text, metadata, and summaries are stored in DuckDB
-6. **Retrieval**: Questions are embedded and matched against the index
-7. **Generation**: Retrieved chunks provide context for answer generation
-8. **Citation**: Sources are tracked and provided with answers
+
+### NEW: Intelligent Routing
+6. **Profiling**: Book metadata is generated with topics, year ranges, and abstracts
+7. **Retrieval**: Questions are embedded and matched against the index
+8. **Routing**: LLM decides LOCAL (use book), GLOBAL (web search), or REJECT (off-topic)
+9. **Generation**: Answer using appropriate source with proper context
+10. **Citation**: Sources are tracked and provided with answers
 
 ## 🛠️ Development
 
 ### Project Structure
 
 - `booker/`: Core library code
+  - `models.py`: Pydantic models (NEW)
+  - `web_search.py`: Web search functionality (NEW)
 - `api/`: FastAPI web service
+- `scripts/`: Standalone scripts
+  - `profile_book.py`: Book metadata generation (NEW)
+- `docs/`: Documentation
+  - `ROUTING.md`: Intelligent routing guide (NEW)
 - `ui/`: React frontend application
 - `tests/`: Comprehensive test suite
 - `library/`: Your book collections organized by book-id (not in git)

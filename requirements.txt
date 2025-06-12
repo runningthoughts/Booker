@@ -16,6 +16,12 @@ pydantic>=2.5.0
 pytest>=7.4.0
 python-dotenv>=1.0.0
 
+# Topic extraction for profiling
+keybert>=0.8.0
+
+# Web search (requests for HTTP calls)
+requests>=2.31.0
+
 # NumPy - compatible with existing packages
 numpy>=1.21.6,<1.27.0
 

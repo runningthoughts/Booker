@@ -34,4 +34,7 @@ else:
     BOOKS_ROOT = Path(os.getenv("BOOKS_ROOT", PROJECT_ROOT / "library"))
 
 # Batch processing
-BATCH_SIZE = 16  # For OpenAI API calls
+BATCH_SIZE = 16
+
+# Similarity threshold for local-only mode (when metadata is absent)
+LOCAL_THRESHOLD = 0.3  # Minimum similarity score for local answers

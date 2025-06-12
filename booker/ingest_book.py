@@ -578,6 +578,10 @@ def main():
                         help="Parent folder where all publications live (default: library)")
     parser.add_argument("--book-id", required=True,
                         help="Folder name of the publication to ingest")
+    parser.add_argument("--profile", action="store_true", 
+                        help="Generate book metadata profile after ingestion")
+    parser.add_argument("--llm-summary", action="store_true",
+                        help="Use LLM for book profiling summary (otherwise use first 500 chars)")
     args = parser.parse_args()
 
     content_id = args.book_id  # Can be book or body of work
@@ -612,6 +616,31 @@ def main():
         ingestor.ingest_all_content(data_dir, content_id)
     finally:
         ingestor.close()
+    
+    # Run profiling if requested
+    if args.profile:
+        import subprocess
+        import sys
+        import pathlib
+        
+        print("Running book profiling...")
+        try:
+            cmd = [
+                sys.executable,
+                str(pathlib.Path(__file__).parent.parent / "scripts" / "profile_book.py"),
+                "--book-id", content_id,
+                "--db-path", str(db_path)
+            ]
+            
+            # Add no-LLM flag for speed (unless user specifically requested LLM summary)
+            if not args.llm_summary:
+                cmd.append("--no-llm-summary")
+            
+            subprocess.check_call(cmd)
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Book profiling failed: {e}")
+        except Exception as e:
+            logger.error(f"Error running book profiling: {e}")
 
 
 if __name__ == "__main__":

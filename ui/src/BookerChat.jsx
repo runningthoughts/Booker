@@ -66,7 +66,7 @@ const BookerChat = () => {
       // Determine API base URL based on environment
       const apiBaseUrl = window.location.hostname === 'booker-ui.onrender.com' 
         ? 'https://booker-api-56am.onrender.com' 
-        : '/api'
+        : 'http://localhost:8000'
       
       // Get DATA_BASE_URL from backend settings
       const configResponse = await fetch(`${apiBaseUrl}/config`)
@@ -207,7 +207,7 @@ const BookerChat = () => {
       // Determine API base URL based on environment (same logic as loadBookAssets)
       const apiBaseUrl = window.location.hostname === 'booker-ui.onrender.com' 
         ? 'https://booker-api-56am.onrender.com' 
-        : '/api'
+        : 'http://localhost:8000'
       
       const response = await fetch(`${apiBaseUrl}/ask/${bookId}`, {
         method: 'POST',
@@ -280,7 +280,7 @@ const BookerChat = () => {
       // Determine API base URL (same logic as other requests)
       const apiBaseUrl = window.location.hostname === 'booker-ui.onrender.com' 
         ? 'https://booker-api-56am.onrender.com' 
-        : '/api'
+        : 'http://localhost:8000'
       
       const response = await fetch(`${apiBaseUrl}/reset_memory`, {
         method: 'POST',
