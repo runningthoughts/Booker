@@ -49,6 +49,7 @@ def load_book_meta(book_id: str, library_root: Path = Path("library")) -> Option
         if meta_path.exists():
             try:
                 logger.info(f"Loading book metadata from: {meta_path.absolute()}")
+                print(f"[Booker] book_meta.json detected and loaded: {meta_path.absolute()}")
                 with open(meta_path, 'r', encoding='utf-8') as f:
                     return json.load(f)
             except Exception as e:
