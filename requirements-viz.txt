@@ -1,0 +1,7 @@
+# dev-only extras for local visualisation
+-r requirements.txt
+renumics-spotlight>=1.6.0
+umap-learn>=0.5
+scikit-learn>=1.5
+typer>=0.12
+# hdbscan>=0.8        # uncomment if you want density-based clusters 

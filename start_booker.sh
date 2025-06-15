@@ -1,5 +1,36 @@
 #!/bin/bash
 
+# Booker startup script with OpenMP fix
+export KMP_DUPLICATE_LIB_OK=TRUE
+
+echo "Starting Booker with OpenMP compatibility fix..."
+
+# Choose what to run
+case "$1" in
+    "api")
+        echo "Starting API server..."
+        uvicorn api.main:app --host 0.0.0.0 --port 8000
+        ;;
+    "viz")
+        echo "Starting visualization app..."
+        python -m booker.viz.cli
+        ;;
+    "both")
+        echo "Starting both API server and viz app..."
+        # Start API in background
+        uvicorn api.main:app --host 0.0.0.0 --port 8000 &
+        # Start viz app
+        python -m booker.viz.cli
+        ;;
+    *)
+        echo "Usage: $0 {api|viz|both}"
+        echo "  api  - Start API server only"
+        echo "  viz  - Start visualization app only"  
+        echo "  both - Start both services"
+        exit 1
+        ;;
+esac
+
 # Booker Startup Script
 echo "🚀 Starting Booker - RAG-based Book Q&A System"
 echo "=============================================="

@@ -14,8 +14,8 @@ EMBED_MODEL = "text-embedding-3-large"
 LLM_MODEL = "gpt-4o-mini"
 
 # Chunking Configuration
-CHUNK_SIZE = 800  # tokens
-CHUNK_OVERLAP = 80  # tokens
+CHUNK_SIZE = 300  # tokens
+CHUNK_OVERLAP = 50  # tokens
 
 # Environment Detection
 IS_PRODUCTION = bool(os.getenv("DATA_BASE_URL"))  # Render sets this env var

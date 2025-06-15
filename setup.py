@@ -9,4 +9,9 @@ setup(
     install_requires=[
         # Dependencies are handled by requirements.txt
     ],
+    entry_points={
+        'console_scripts': [
+            'booker-viz=booker.viz.cli:app',
+        ],
+    },
 ) 

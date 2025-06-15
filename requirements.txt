@@ -25,6 +25,13 @@ requests>=2.31.0
 # NumPy - compatible with existing packages
 numpy>=1.21.6,<1.27.0
 
+# Visualization (optional)
+renumics-spotlight>=1.6.0
+umap-learn>=0.5.0
+pandas>=1.1.0,<2.2.0  # Compatible with pycaret and sktime
+typer>=0.9.0
+rich>=13.0.0  # For CLI formatting
+
 # Note: For the React frontend, you'll need Node.js and npm/yarn
 # Run these commands in the ui/ directory:
 # npm install react react-dom

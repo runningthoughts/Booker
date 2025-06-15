@@ -195,6 +195,47 @@ finally:
     retriever.close()
 ```
 
+## 📊 Local Visualization
+
+Booker includes a powerful Spotlight-based visualization tool with semantic clustering for exploring book embeddings and metadata! This is an optional dev-only feature that requires additional dependencies.
+
+### Installation
+
+```bash
+# 1. install the dev extras
+pip install -r requirements-viz.txt
+```
+
+### Usage
+
+```bash
+# 2. run the explorer
+python -m booker.viz <publication_id>       # auto clusters  
+python -m booker.viz <publication_id> --k 20 # manual cluster count
+
+# Additional options:
+python -m booker.viz <publication_id> --no-cluster          # skip clustering
+python -m booker.viz <publication_id> --no-extra-metadata   # skip DuckDB merge
+```
+
+### Features
+
+The enhanced visualization now includes:
+
+- **Semantic Clustering**: Automatic k-means clustering (~25 points per cluster)
+- **DuckDB Integration**: Merges heading levels and importance scores if available  
+- **Smart Layouts**: Adaptive UMAP parameters based on dataset size
+- **Intelligent Coloring**: Auto-selects color scheme (clusters → headings → levels)
+- **Production-Safe**: Heavy dependencies are dev-only, won't impact Render deployments
+
+### What You'll See
+
+- Interactive Spotlight interface with your book's vector embeddings
+- Semantic clusters colored by k-means labels
+- Rich metadata filtering and analysis
+- Optimized UMAP dimensionality reduction
+- Source text and summaries for each chunk
+
 ## 🔧 Configuration
 
 ### Environment Variables
