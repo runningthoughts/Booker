@@ -123,7 +123,7 @@ async def ask_question(
     
     try:
         paths = resolve_book_paths(book_id)
-        retriever = BookerRetriever(paths["db"], paths["index"])
+        retriever = BookerRetriever(paths["db"], paths["index"], book_id=book_id)
         try:
             result = answer_question(request.question, retriever, k=request.k, session_id=session_id, book_id=book_id)
             return result
@@ -152,7 +152,7 @@ async def ask_question_stream(book_id: str, request: QuestionRequest):
     
     try:
         paths = resolve_book_paths(book_id)
-        retriever = BookerRetriever(paths["db"], paths["index"])
+        retriever = BookerRetriever(paths["db"], paths["index"], book_id=book_id)
         
         def generate_stream():
             try:

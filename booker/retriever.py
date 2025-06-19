@@ -2,7 +2,11 @@
 Retrieval module for finding similar chunks using FAISS and DuckDB.
 """
 
+import json
 import pickle
+import re
+import pathlib
+from functools import lru_cache
 from typing import List, Dict, Any, Optional
 from pathlib import Path
 
@@ -16,17 +20,91 @@ from . import settings
 # Initialize OpenAI client
 openai.api_key = settings.OPENAI_API_KEY
 
+# Constants for sidecar functionality
+KEYWORD_BOOST = 0.25   # weight added to FAISS similarity; tune freely
+_WORD_RE = re.compile(r"\w+")
+
+
+@lru_cache(maxsize=16)
+def _load_sidecar(book_id: str) -> Optional[Dict[str, Any]]:
+    """Load sidecar JSON for a book, with caching."""
+    try:
+        # Try to find the sidecar file in the book's build directory
+        from .utils import get_book_build_path
+        sidecar_dir = get_book_build_path(book_id) / "sidecars"
+        sidecar_path = sidecar_dir / f"{book_id}_summaries.json"
+        
+        if sidecar_path.exists():
+            with sidecar_path.open(encoding="utf-8") as f:
+                return json.load(f)
+    except Exception:
+        pass
+    
+    # Fallback to library structure
+    try:
+        from .utils import get_books_root
+        books_root = get_books_root()
+        sidecar_path = books_root / book_id / "build" / "sidecars" / f"{book_id}_summaries.json"
+        
+        if sidecar_path.exists():
+            with sidecar_path.open(encoding="utf-8") as f:
+                return json.load(f)
+    except Exception:
+        pass
+    
+    return None
+
+
+def _keyword_overlap_score(query: str, card: Dict[str, Any]) -> float:
+    """Calculate keyword/entity overlap score between query and chunk card."""
+    if not card:
+        return 0.0
+    
+    # Extract and normalize query words
+    query_words = set(_WORD_RE.findall(query.lower()))
+    if not query_words:
+        return 0.0
+    
+    # Extract target words from keywords and entities
+    target_words = set()
+    
+    # Add keywords
+    keywords = card.get("keywords", [])
+    if isinstance(keywords, list):
+        for keyword in keywords:
+            if isinstance(keyword, str):
+                target_words.update(_WORD_RE.findall(keyword.lower()))
+    
+    # Add entities
+    entities = card.get("entities", [])
+    if isinstance(entities, list):
+        for entity in entities:
+            if isinstance(entity, str):
+                target_words.update(_WORD_RE.findall(entity.lower()))
+    
+    if not target_words:
+        return 0.0
+    
+    # Calculate overlap score
+    intersection = query_words.intersection(target_words)
+    return len(intersection) / len(target_words)
+
 
 class BookerRetriever:
     """Handles semantic search and retrieval of book chunks."""
     
-    def __init__(self, db_path: Path, index_path: Path):
+    def __init__(self, db_path: Path, index_path: Path, book_id: str = None):
         """Initialize the retriever with FAISS index and database connection."""
         self.db_conn = duckdb.connect(str(db_path))
         self.faiss_index: Optional[faiss.IndexFlatIP] = None
         self.chunk_metadata: List[Dict[str, Any]] = []
         self.index_path = index_path
         self.index_meta_path = index_path.parent / "booker.pkl"
+        self.book_id = book_id
+        
+        # Load sidecar if book_id is provided
+        self._sidecar = _load_sidecar(book_id) if book_id else None
+        
         self._load_index()
     
     def _load_index(self) -> None:
@@ -122,6 +200,19 @@ class BookerRetriever:
         # Search FAISS index (get more candidates for MMR)
         search_k = min(k * 3, self.faiss_index.ntotal)
         scores, indices = self.faiss_index.search(query_embedding, search_k)
+        
+        # Apply sidecar-based re-ranking if available
+        if self._sidecar and "chunks" in self._sidecar:
+            boosts = np.zeros_like(scores)
+            for col, idx in enumerate(indices[0]):
+                if idx == -1:
+                    continue
+                # Get chunk card from sidecar (chunk_id is 1-based, but idx is 0-based)
+                chunk_id = idx + 1
+                if chunk_id <= len(self._sidecar["chunks"]):
+                    card = self._sidecar["chunks"][chunk_id - 1]  # Convert to 0-based for list access
+                    boosts[0, col] = _keyword_overlap_score(query, card) * KEYWORD_BOOST
+            scores += boosts  # in-place; higher still means more similar
         
         # Get candidate embeddings for MMR
         candidate_embeddings = []

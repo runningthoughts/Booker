@@ -6,13 +6,14 @@ Supports intelligent routing between local and global search based on metadata.
 import json
 import logging
 import os
+import re
 from pathlib import Path, PurePath
 from typing import Dict, List, Any, Optional
 
 import openai
 
 from . import settings
-from .retriever import BookerRetriever
+from .retriever import BookerRetriever, _load_sidecar
 from .memory import get_chat_memory
 from .web_search import answer_from_web
 
@@ -20,6 +21,12 @@ logger = logging.getLogger(__name__)
 
 # Initialize OpenAI client
 openai.api_key = settings.OPENAI_API_KEY
+
+# Overview detection pattern
+_OVERVIEW_PAT = re.compile(
+    r"\b(summary|summarise|overview|high[- ]level|abstract|main idea)\b",
+    re.I,
+)
 
 # Out of scope response for rejected questions
 OUT_OF_SCOPE_RESPONSE = {
@@ -145,7 +152,7 @@ Routing Decision:"""
         return "LOCAL"
 
 
-def answer_from_chunks(question: str, chunks: List[Dict[str, Any]], session_id: str = None) -> Dict[str, Any]:
+def answer_from_chunks(question: str, chunks: List[Dict[str, Any]], session_id: str = None, book_id: str = None) -> Dict[str, Any]:
     """
     Answer a question using only the provided book chunks.
     
@@ -153,6 +160,7 @@ def answer_from_chunks(question: str, chunks: List[Dict[str, Any]], session_id: 
         question: User's question
         chunks: Retrieved book chunks
         session_id: Optional session ID for memory
+        book_id: Optional book ID for sidecar lookup
         
     Returns:
         Answer dictionary with local sources
@@ -163,18 +171,45 @@ def answer_from_chunks(question: str, chunks: List[Dict[str, Any]], session_id: 
             "sources": []
         }
     
+    # Check if this is an overview-style question
+    is_overview = _OVERVIEW_PAT.search(question) is not None
+    
+    # Load sidecar if we're in overview mode and have a book_id
+    side = None
+    if is_overview and book_id:
+        side = _load_sidecar(book_id)
+    
     # Build context from chunks
     context_parts = []
     sources = []
     
     for i, chunk in enumerate(chunks, 1):
-        # Add chunk text to context
-        context_parts.append(f"[Source {i}] {chunk['text']}")
+        # Choose between summary and full text based on overview detection
+        if side and "chunks" in side and is_overview:
+            # Use summaries instead of full text for overview queries
+            chunk_id = chunk.get('chunk_id', i)
+            if chunk_id <= len(side['chunks']):
+                summary = side['chunks'][chunk_id - 1].get('summary', '')
+                if summary:
+                    context_parts.append(f"[Source {i}] {summary}")
+                else:
+                    # Fallback to database summary or truncated text
+                    db_summary = chunk.get('summary', '')
+                    if db_summary:
+                        context_parts.append(f"[Source {i}] {db_summary}")
+                    else:
+                        context_parts.append(f"[Source {i}] {chunk['text'][:300]}...")
+            else:
+                # Fallback if chunk_id is out of range
+                context_parts.append(f"[Source {i}] {chunk['text'][:300]}...")
+        else:
+            # Use full chunk text for non-overview queries
+            context_parts.append(f"[Source {i}] {chunk['text']}")
         
         # Add to sources list
         sources.append({
             "source_id": i,
-            "file_name": chunk["file_name"],
+            "file_name": chunk["file_name"], 
             "page_start": chunk["page_start"],
             "page_end": chunk["page_end"],
             "text": chunk["text"][:200] + "..." if len(chunk["text"]) > 200 else chunk["text"],
@@ -346,7 +381,7 @@ def answer_question(question: str, retriever: BookerRetriever, k: int = 5, sessi
                 logger.info(f"Router decision: {route}")
                 
                 if route == "LOCAL":
-                    return answer_from_chunks(question, chunks, session_id)
+                    return answer_from_chunks(question, chunks, session_id, book_id)
                 elif route == "KNOWLEDGE":
                     return answer_from_knowledge(question, meta)
                 elif route == "GLOBAL":
@@ -355,14 +390,14 @@ def answer_question(question: str, retriever: BookerRetriever, k: int = 5, sessi
                     return OUT_OF_SCOPE_RESPONSE
             except Exception as e:
                 logger.error(f"Error in routing logic: {e}, falling back to local search")
-                return answer_from_chunks(question, chunks, session_id)
+                return answer_from_chunks(question, chunks, session_id, book_id)
         else:
             # No metadata available - fall back to local-only mode (current behavior)
             logger.info("No metadata available, using local-only mode")
             if not chunks:
                 return OUT_OF_SCOPE_RESPONSE
             
-            return answer_from_chunks(question, chunks, session_id)
+            return answer_from_chunks(question, chunks, session_id, book_id)
     
     except Exception as e:
         logger.error(f"Error in answer_question: {e}")
