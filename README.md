@@ -1,5 +1,7 @@
 # 📚 Booker - RAG-based Book Q&A System
 
+> **🚀 Project Release Notice**: This is a packaged release of the Booker system. The `library/` directory is not included in the release as it contains your personal book collection. You'll need to create this directory and add your books if you wish to ingest content locally. See the [Quick Start](#-quick-start) section for setup instructions.
+
 Booker is an intelligent question-answering system that allows you to ask questions about your book collection and get accurate answers with citations. It uses Retrieval-Augmented Generation (RAG) to combine semantic search with large language models.
 
 ## 🌟 Features
@@ -11,6 +13,7 @@ Booker is an intelligent question-answering system that allows you to ask questi
 - **Citation Support**: Provides source references with page numbers
 - **Modern Web UI**: Beautiful React-based chat interface
 - **RESTful API**: FastAPI backend with streaming support
+- **Cloud Deployment**: Production-ready with S3 integration for Render deployment
 - **Comprehensive Testing**: Full test suite with mocked API calls
 
 ## 🏗️ Architecture
@@ -248,9 +251,25 @@ The intelligent routing system automatically enables when book metadata is prese
 
 - `EMBED_MODEL`: OpenAI embedding model (default: "text-embedding-3-large")
 - `LLM_MODEL`: OpenAI chat model (default: "gpt-4o-mini")
-- `CHUNK_SIZE`: Token size for text chunks (default: 1500)
-- `CHUNK_OVERLAP`: Overlap between chunks (default: 200)
+- `CHUNK_SIZE`: Token size for text chunks (default: 300)
+- `CHUNK_OVERLAP`: Overlap between chunks (default: 50)
 - `BATCH_SIZE`: Batch size for API calls (default: 16)
+- `LOCAL_THRESHOLD`: Minimum similarity score for local answers (default: 0.3)
+
+## 🚀 Cloud Deployment
+
+Booker supports cloud deployment on platforms like Render with S3 storage for book assets. The system automatically detects the environment and handles file paths accordingly.
+
+### Environment Detection
+- **Local Development**: Uses local `library/` directory
+- **Production**: Automatically detected via `DATA_BASE_URL` environment variable
+- **S3 Integration**: Seamlessly handles asset serving from S3 in production
+
+### Deployment Configuration
+- See `render.yaml` for Render deployment configuration
+- Configure `DATA_BASE_URL` for S3 bucket integration
+- Assets (covers, metadata) served from S3 in production
+- Database and indexes remain on the server for performance
 
 ## 🗄️ Database Schema
 
@@ -385,6 +404,18 @@ The tests use mocked OpenAI API calls to avoid costs during development.
 3. **Empty Results**: Check that books are in the correct `library/<book-id>/source/` directory and ingestion completed
 4. **Port Conflicts**: Change ports in `api/main.py` and `ui/vite.config.js`
 5. **Book Not Found**: Ensure the book-id matches the directory name and ingestion was successful
+6. **Missing Library Directory**: Create the `library/` directory structure manually if using a fresh release
+
+### Environment-Specific Issues
+
+**Local Development:**
+- Ensure the `library/` directory exists in your project root
+- Check that your book files are in the correct `library/<book-id>/source/` structure
+
+**Production Deployment:**
+- Verify `DATA_BASE_URL` environment variable is set correctly
+- Ensure S3 bucket permissions are configured properly
+- Check that book assets are uploaded to the correct S3 paths
 
 ### Logs
 
@@ -408,4 +439,4 @@ For issues and questions, please check the troubleshooting section or create an 
 
 ---
 
-**Happy reading and questioning! 📚✨** 
+**Happy reading and questioning! 📚✨**
