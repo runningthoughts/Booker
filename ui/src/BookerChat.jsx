@@ -5,7 +5,7 @@ import './BookerChat.css'
 const SpinUpMessage = memo(({ isSpinningUp, spinUpCountdown }) => {
   if (!isSpinningUp) return null
 
-  const progress = ((60 - spinUpCountdown) / 60) * 100
+  const progress = ((90 - spinUpCountdown) / 90) * 100
 
   return (
     <div className="spin-up-overlay">
@@ -13,7 +13,7 @@ const SpinUpMessage = memo(({ isSpinningUp, spinUpCountdown }) => {
         <div className="spin-up-icon">⚙️</div>
         <h3 className="spin-up-title">Waking the hamsters…</h3>
         <p className="spin-up-text">
-          our free-tier server takes a catnap after 15 minutes. Give it up to 60 seconds to stretch, yawn, and start answering your questions!
+          our free-tier server takes a catnap after 15 minutes. Give it up to 90 seconds to stretch, yawn, and start answering your questions!  When it's ready, you'll see cover art and a title and description of the contents.
         </p>
         <div className="progress-container">
           <div className="progress-bar">
